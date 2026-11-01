@@ -6,9 +6,11 @@
 <main>
 <div class="hero"><div class="eyebrow">CINEBENCH / 2003–2026</div><h1>Każdy wynik.<br>W jednym miejscu.</h1><p>Archiwum wydajności Twojego sprzętu. Importuj pomiary,<br>zapisuj konfiguracje i przeglądaj historię testów.</p></div>
 <div id="message" role="status" aria-live="polite"></div>
+<aside id="empty-state" class="panel" hidden><h2>Zacznij od pierwszych raportów</h2><p>Baza jest pusta. Nie musisz tworzyć jej ręcznie — aplikacja przygotowała ją automatycznie. Wybierz jeden lub wiele plików Cinebench albo dodaj raport ręcznie.</p><button id="first-import" type="button">Wybierz pliki wynikowe</button></aside>
 <section class="panel"><div class="section-head"><div><span class="eyebrow">01 / DODAWANIE DANYCH</span><h2>Importuj plik wynikowy</h2></div><span class="tag">Najpierw podgląd, potem zapis</span></div>
-<p>Wybierz jeden lub wiele raportów Cinebench 2003, 9.5, R10, R11.5, R15, R20, R23, 2024 lub 2026. Odczytamy wersję, sprzęt i wykonane testy. Jeden plik tworzy jeden rekord, a niewykonane testy pozostają puste.</p>
+<p>Wybierz do 500 raportów naraz: Cinebench 2003, 9.5, R10, R11.5, R15, R20, R23, 2024 lub 2026. Odczytamy wersję, sprzęt i wykonane testy. Jeden plik tworzy jeden rekord, a niewykonane testy pozostają puste.</p>
 <label class="drop">↑ <strong>Wybierz pliki wynikowe</strong><input id="report-file" type="file" multiple><span id="file-name">TXT, JSON lub tekstowy plik rankingu · maks. 2 MB</span></label>
+<div id="import-activity" hidden><p id="import-status" role="status" aria-live="polite"></p><progress id="import-progress" value="0" max="1"></progress><button id="cancel-reading" type="button" class="secondary">Anuluj odczyt</button></div>
 <form id="import-form" hidden>
 <h3>Uzupełnij brakujące dane</h3><p>Dane obecne w pliku mają pierwszeństwo. Pliki nie zawierają daty pomiaru — zostaw ją pustą, jeśli jest nieznana.</p>
 <div class="grid">

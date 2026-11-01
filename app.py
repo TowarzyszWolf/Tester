@@ -3,6 +3,8 @@ import argparse
 import csv
 import io
 import json
+import hashlib
+import re
 import sqlite3
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -37,6 +39,7 @@ class Store:
     def __init__(self,path):
         self.path=Path(path)
         self.path.parent.mkdir(parents=True,exist_ok=True)
+        self.created = not self.path.exists() or self.path.stat().st_size == 0
         self.backup_path=None
         with self.connect() as conn:
             columns={row['name'] for row in conn.execute('PRAGMA table_info(results)')}
@@ -65,12 +68,13 @@ class Store:
                 for old_id,created,row in combined:
                     conn.execute(sql,[old_id,created or '']+[row[key] for key in FIELDS])
                 conn.execute('DROP TABLE results_legacy')
-            conn.execute('PRAGMA user_version = 4')
+            conn.execute('PRAGMA user_version = 5')
 
     @contextmanager
     def connect(self):
         conn=sqlite3.connect(self.path,timeout=10)
         conn.row_factory=sqlite3.Row
+        conn.execute('PRAGMA foreign_keys = ON')
         try:
             with conn:
                 yield conn
@@ -116,6 +120,41 @@ class Store:
             value=row[sort]
             return normalized(value) if isinstance(value,str) else value
         return sorted(known,key=key,reverse=filters.get('direction')=='desc')+missing
+
+    def status(self):
+        with self.connect() as conn:
+            return {'record_count': conn.execute('SELECT count(*) FROM results').fetchone()[0],
+                    'database_created': self.created}
+
+    def import_batch(self,items):
+        if not isinstance(items,list) or not 1 <= len(items) <= 100:
+            raise ValueError('Partia musi zawierać od 1 do 100 raportów.')
+        outcomes=[]
+        with self.connect() as conn:
+            # Acquire the write lock before checking receipts, including concurrent retries.
+            conn.execute('BEGIN IMMEDIATE')
+            for item in items:
+                token=item.get('token','') if isinstance(item,dict) else ''
+                try:
+                    if not isinstance(token,str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,128}',token):
+                        raise ValueError('Nieprawidłowy identyfikator importu.')
+                    row=validate(item.get('record'))
+                    digest=hashlib.sha256(json.dumps(row,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+                    receipt=conn.execute('SELECT * FROM import_receipts WHERE token=?',(token,)).fetchone()
+                    if receipt:
+                        if receipt['payload_hash'] != digest:
+                            raise ValueError('Identyfikator importu został już użyty dla innych danych.')
+                        outcomes.append({'token':token,'status':'already_saved','id':receipt['result_id']})
+                        continue
+                    sql=f"INSERT INTO results ({','.join(FIELDS)}) VALUES ({','.join('?' for _ in FIELDS)})"
+                    result_id=conn.execute(sql,[row[key] for key in FIELDS]).lastrowid
+                    conn.execute('INSERT INTO import_receipts VALUES(?,?,?)',(token,digest,result_id))
+                    outcomes.append({'token':token,'status':'saved','id':result_id})
+                except ValueError as exc:
+                    outcomes.append({'token':token if isinstance(token,str) else '', 'status':'error','error':str(exc)})
+        return {'added':sum(r['status']=='saved' for r in outcomes),
+                'already_saved':sum(r['status']=='already_saved' for r in outcomes),
+                'failed':sum(r['status']=='error' for r in outcomes),'items':outcomes}
 
     def delete(self,result_id):
         with self.connect() as conn:
@@ -200,6 +239,8 @@ def handler_for(store):
                     self.reply(200, rows)
             elif url.path == '/api/database':
                 self.reply(200, store.snapshot(), 'application/vnd.sqlite3', 'cinebench.sqlite3')
+            elif url.path == '/api/status':
+                self.reply(200, store.status())
             elif url.path == '/api/template.csv':
                 self.reply(200, (','.join(FIELDS) + '\r\n').encode(), 'text/csv; charset=utf-8', 'szablon.csv')
             else:
@@ -219,6 +260,10 @@ def handler_for(store):
                     if not isinstance(rows, list) or not rows:
                         raise ValueError('Brak wyników do zapisania.')
                     count = store.add(rows)
+                elif path == '/api/import-batch':
+                    outcome = store.import_batch(json.loads(self.body()))
+                    self.reply(200, outcome)
+                    return
                 elif path == '/api/import':
                     count = store.add(parse_csv(self.body()))
                 else:
@@ -227,6 +272,8 @@ def handler_for(store):
                 self.reply(201, {'added': count})
             except (ValueError, UnicodeError) as exc:
                 self.reply(400, {'error': str(exc)})
+            except sqlite3.Error:
+                self.reply(503, {'error': 'Nie udało się zapisać partii. Ponów import — już zapisane pliki nie zostaną dodane ponownie.'})
 
         def do_DELETE(self):
             try:
@@ -250,7 +297,13 @@ def main():
     parser.add_argument('--port', type=int, default=8000)
     parser.add_argument('--db', type=Path, default=ROOT / 'data' / 'cinebench.sqlite3')
     args = parser.parse_args()
-    server = ThreadingHTTPServer((args.host, args.port), handler_for(Store(args.db)))
+    try:
+        store = Store(args.db)
+    except (OSError, sqlite3.Error, ValueError) as exc:
+        parser.exit(1, f'Nie udało się otworzyć lub przygotować bazy {args.db}: {exc}\n')
+    if store.created:
+        print(f'Utworzono nową, pustą bazę: {args.db}', flush=True)
+    server = ThreadingHTTPServer((args.host, args.port), handler_for(store))
     print(f'Cinebench: http://{args.host}:{server.server_port} | baza: {args.db}', flush=True)
     try:
         server.serve_forever()

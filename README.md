@@ -4,7 +4,7 @@ Lokalna aplikacja po polsku, Python 3.12+, SQLite, bez dodatkowych bibliotek. Je
 
 ## Pobieranie i start
 
-[Pobierz program v4 z bazą 25 raportów / 62 pomiarów](https://github.com/TowarzyszWolf/Tester/raw/refs/heads/main/downloads/cinebase-v4.zip). Rozpakuj do nowego folderu. W katalogu programu uruchom:
+[Pobierz program v5 — start z pustą bazą](https://github.com/TowarzyszWolf/Tester/raw/refs/heads/main/downloads/cinebase-v5.zip). Rozpakuj do nowego folderu. W katalogu programu uruchom:
 
 ```sh
 python app.py
@@ -14,9 +14,17 @@ Na własnym komputerze otwórz `http://127.0.0.1:8000`. Zatrzymanie: Ctrl+C. Mo�
 
 Osobno: [baza SQLite](downloads/cinebase-wyniki.sqlite3) i [eksport SQL](downloads/cinebase-wyniki.sql).
 
+## Pierwszy start bez bazy
+
+Paczka v5 nie zawiera pliku bazy. Przy starcie program sam tworzy katalog `data`, plik `cinebench.sqlite3`, tabele i indeksy. Nie trzeba uruchamiać SQL ani instalować SQLite osobno. Strona pokaże pustą bazę i przycisk wyboru pierwszych raportów. Tak samo działa nowa ścieżka podana przez `--db`, również z brakującymi katalogami. Ponowny start zachowuje zapisane rekordy.
+
+Plik bazy o rozmiarze zero jest inicjalizowany. Uszkodzona istniejąca baza nie jest zastępowana nową — program kończy się z czytelnym błędem, zachowując plik. Gdy chcesz rozpocząć oddzielną bazę, wskaż nową nazwę przez `--db`.
+
+Przykładowa baza 25 raportów / 62 pomiarów jest dostępna osobno w `downloads/cinebase-wyniki.sqlite3`. Można ją uruchomić poleceniem `python app.py --db downloads/cinebase-wyniki.sqlite3` po pobraniu całego repozytorium. Standardowa paczka v5 zaczyna bez przykładowych danych.
+
 ## Raporty i import
 
-Wybierz do 100 plików, sprawdź podgląd i zapisz. Wersja benchmarku, CPU, GPU, system, rdzenie, wątki i MHz są odczytywane z treści. Zera i `---` oznaczają brak pomiaru, zapisywany jako SQL `NULL`, bez wliczania do średnich. Rozpoznany plik bez wykonanych testów również tworzy jeden rekord (próbka 2024). Znajdziesz go w widoku **Oryginalne raporty**; nie wnosi wartości do widoków średnich. Ręczny formularz także zapisuje wszystkie podane wyniki jako jeden rekord.
+Wybierz do 500 plików naraz, sprawdź podgląd i zapisz. Pasek postępu pokazuje odczyt oraz zapis. Odczyt można anulować bez zapisywania danych. Wersja benchmarku, CPU, GPU, system, rdzenie, wątki i MHz są odczytywane z treści. Zera i `---` oznaczają brak pomiaru, zapisywany jako SQL `NULL`, bez wliczania do średnich. Rozpoznany plik bez wykonanych testów również tworzy jeden rekord (próbka 2024). Znajdziesz go w widoku **Oryginalne raporty**; nie wnosi wartości do widoków średnich. Ręczny formularz także zapisuje wszystkie podane wyniki jako jeden rekord.
 
 Importer sprawdzono na 25 rzeczywistych raportach, obejmujących 62 wykonane pomiary z Cinebench 2003, 9.5, R10, R11.5, R15, R20, R23 i 2026 oraz pusty raport 2024. Dodatni wynik CBGPU jest testowany na zmodyfikowanej próbce, bez rzeczywistego pomiaru GPU 2024/2026.
 
@@ -28,7 +36,7 @@ Importer sprawdzono na 25 rzeczywistych raportach, obejmujących 62 wykonane pom
 - Modele GPU są opcjonalne również przy pomiarze GPU. W ręcznym formularzu można włączyć pole modelu karty.
 - Data pomiaru nie jest odgadywana. Pozostaw puste, jeśli nieznana. Czas importu jest osobnym polem `created_at`.
 
-Tekst UTF-8 / UTF-16 z BOM, końce linii Windows/Unix/klasyczny Mac OS. Limit 2 MB na plik oraz na całe żądanie zapisu. Nieznane i błędne pliki są opisane w podsumowaniu i nie są zapisywane. Poprawne raporty można zatwierdzić niezależnie. Powtórny import tworzy kolejny rekord — nie usuwa duplikatów automatycznie.
+Tekst UTF-8 / UTF-16 z BOM, końce linii Windows/Unix/klasyczny Mac OS. Limit 2 MB na pojedynczy plik. Łączny rozmiar wielu plików może być większy: strona dzieli zapis na partie do 25 raportów i około 500 KB, zamiast wysyłać wszystko jednym żądaniem. Nieznane i błędne pliki są opisane w podsumowaniu i nie są zapisywane. Poprawne raporty są zapisywane także wtedy, gdy inne mają błędy. Błędy odczytu i zapisu są przypisane do nazw plików. Po zapisie pozostają w podglądzie tylko błędne lub jeszcze niezapisane raporty: uzupełnij brakujące dane i ponów zapis. Ponowienie po utracie odpowiedzi w tej samej sesji strony nie dubluje już zapisanych raportów (identyfikatory potwierdzeń w tabeli import_receipts). Nie odświeżaj strony przed wznowieniem przerwanego importu, jeśli chcesz zachować jego identyfikatory. Ponowne wybranie tych samych plików rozpoczyna nowy import i może utworzyć kolejne rekordy; nie ma automatycznego usuwania duplikatów treści.
 
 Obsługiwane są również uproszczone wiersze `CPU (Multi Core): 12345 pts` i JSON. Jeden plik JSON musi opisywać jedną konfigurację, bez powtórzonego rodzaju pomiaru. Przykłady i rzeczywiste próbki: `examples` i `tests/fixtures`.
 
@@ -71,7 +79,7 @@ Przycisk **Pobierz bazę SQLite** tworzy spójną kopię całej bazy. Można ją
 
 Przy pierwszym uruchomieniu v4 program zapisuje kopię `cinebench.sqlite3.before-v4.sqlite3` obok bazy (jeśli nazwa jest zajęta, wybiera kolejny numer). Następnie transakcyjnie przebudowuje tabelę. Łączy stare wiersze z tą samą nazwą pliku, konfiguracją, wersją i czasem importu z dokładnością do sekundy, do momentu powtórzenia rodzaju testu. Osobne powtórne importy pozostają osobnymi raportami. Oryginalne wartości i notatki są zachowywane. Rekord bez pliku źródłowego pozostaje osobnym raportem, ponieważ nie można bezpiecznie odtworzyć jego pochodzenia. Zachowany jest identyfikator pierwszego wiersza każdej grupy; wszystkie stare identyfikatory są dostępne w kopii bazy.
 
-Starsza baza nie zawiera wcześniej pominiętych pustych raportów — takie pliki trzeba ponownie zaimportować. Do paczki v4 dołączono także pustą próbkę 2024, dlatego baza przykładowa ma 25 raportów i 62 pomiary. Błąd migracji pozostawia starą tabelę bez zmian.
+Starsza baza nie zawiera wcześniej pominiętych pustych raportów — takie pliki trzeba ponownie zaimportować. Do osobnej bazy przykładowej dołączono także pustą próbkę 2024, dlatego ma ona 25 raportów i 62 pomiary. Aktualizacja v4 do v5 dodaje tylko tabelę potwierdzeń importu, bez zmiany rekordów raportów. Błąd migracji pozostawia starą tabelę bez zmian.
 
 ## Testy
 
@@ -79,4 +87,4 @@ Starsza baza nie zawiera wcześniej pominiętych pustych raportów — takie pli
 python -m unittest discover -s tests -v
 ```
 
-Testy korzystają z tymczasowych baz i lokalnego serwera. Sprawdzają dokładne wartości z 25 próbek, jeden plik/jeden rekord, komplet kolumn, sortowanie, średnie i ich liczebności, rozdzielanie wersji i jednostek, wartości brakujące, migrację z kopią bazy, zachowanie powtórnych importów, walidację i przepływ HTTP/CSV. Dane użytkownika pozostają bez zmian.
+Testy korzystają z tymczasowych baz i lokalnego serwera. Sprawdzają dokładne wartości z 25 próbek, jeden plik/jeden rekord, komplet kolumn, sortowanie, średnie i ich liczebności, rozdzielanie wersji i jednostek, wartości brakujące, migrację z kopią bazy, zachowanie powtórnych importów, walidację i przepływ HTTP/CSV. Dodatkowe testy sprawdzają pierwszy start bez bazy i katalogu, pusty plik, ochronę uszkodzonej bazy, częściowo błędne partie oraz równoległe ponowienia bez dublowania rekordów. Dane użytkownika pozostają bez zmian.

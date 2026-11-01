@@ -1,4 +1,9 @@
 BEGIN TRANSACTION;
+CREATE TABLE import_receipts (
+    token TEXT PRIMARY KEY,
+    payload_hash TEXT NOT NULL,
+    result_id INTEGER REFERENCES results(id) ON DELETE SET NULL
+);
 CREATE TABLE results (
     id INTEGER PRIMARY KEY,
     edition TEXT NOT NULL DEFAULT '',

@@ -35,3 +35,8 @@ CREATE TABLE IF NOT EXISTS results (
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_results_hardware ON results(edition, cpu, gpu);
+CREATE TABLE IF NOT EXISTS import_receipts (
+    token TEXT PRIMARY KEY,
+    payload_hash TEXT NOT NULL,
+    result_id INTEGER REFERENCES results(id) ON DELETE SET NULL
+);

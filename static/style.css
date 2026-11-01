@@ -3,3 +3,5 @@
 .gpu-choice{justify-content:center}.gpu-choice input{width:auto;margin-right:7px}.preview-entry{padding:14px 0;border-bottom:1px solid var(--line)}.preview-entry p{margin:5px 0}.preview-entry small{color:var(--muted);overflow-wrap:anywhere}
 
 .sort-header{background:transparent;color:var(--green);padding:4px 0;text-align:left;font-size:11px}.table-wrap table{min-width:1900px}.score strong{font-size:16px}.filters{grid-template-columns:2fr 1fr 1.5fr 1.3fr 1fr auto}@media(max-width:760px){.filters{grid-template-columns:1fr 1fr}}
+
+#import-activity{padding:16px 0}#import-progress{width:min(100%,600px);height:14px;accent-color:var(--green);margin-right:15px}.import-error{color:#ffc4b1!important}
