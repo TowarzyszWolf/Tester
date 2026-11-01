@@ -19,6 +19,19 @@ def number(value, field):
     return result
 
 
+def report_clock(fields, edition):
+    if edition not in ('2024', '2026'):
+        return fields.get('MHZ', ''), 'MHZ'
+    for key in ('MHZ', 'MHZ_ESTIMATE'):
+        try:
+            value = float(fields.get(key, '').replace(',', '.'))
+        except ValueError:
+            continue
+        if math.isfinite(value) and value > 0:
+            return value, key
+    return '', ''
+
+
 def native_report(text):
     """Return None for an unrelated format, [] for a recognized empty report."""
     modern = re.search(r'(?im)^COMMENT=These are your MAXON CINEBENCH R(11\.5|15|20|23|2024|2026) results\.', text)
@@ -48,9 +61,15 @@ def native_report(text):
             threads = str(int(cores) * int(fields['LOGICALCORES']))
         extra_keys = ('C4DBUILDID', 'OPENGLVENDOR', 'OPENGLVERSION', 'DRIVERVERSION', 'GPUVENDOR', 'GPUAPI')
         notes = [f'{key}={fields[key]}' for key in extra_keys if fields.get(key)]
+        clock_mhz, clock_source = report_clock(fields, edition)
+        if edition in ('2024', '2026'):
+            if clock_source == 'MHZ_ESTIMATE':
+                notes.append(f'Taktowanie szacowane: MHZ_ESTIMATE={clock_mhz} MHz (nieprawidłowe lub brak MHZ).')
+            elif not clock_source:
+                notes.append('Brak prawidłowego taktowania w MHZ i MHZ_ESTIMATE.')
         common = dict(edition=edition, cpu=fields.get('PROCESSOR', ''),
                       gpu=fields.get('GPUCARD') or fields.get('OPENGLCARD', ''),
-                      cores=cores, threads=threads, clock_mhz=fields.get('MHZ', ''),
+                      cores=cores, threads=threads, clock_mhz=clock_mhz, notes='\n'.join(notes),
                       os=fields.get('OSVERSION', ''), system_name=fields.get('C4DINFO', ''),
                       architecture=fields.get('CBTYPE', ''), benchmark_version=fields.get('C4DVERSION', ''))
         for key, mode, unit in (

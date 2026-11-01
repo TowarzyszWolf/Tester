@@ -4,7 +4,7 @@ Lokalna aplikacja po polsku, Python 3.12+, SQLite, bez dodatkowych bibliotek. Je
 
 ## Pobieranie i start
 
-[Pobierz program v6 — start z pustą bazą](https://github.com/TowarzyszWolf/Tester/raw/refs/heads/main/downloads/cinebase-v6.zip). Rozpakuj do nowego folderu. W katalogu programu uruchom:
+[Pobierz program v7 — start z pustą bazą](https://github.com/TowarzyszWolf/Tester/raw/refs/heads/main/downloads/cinebase-v7.zip). Rozpakuj do nowego folderu. W katalogu programu uruchom:
 
 ```sh
 python app.py
@@ -16,11 +16,11 @@ Osobno: [baza SQLite](downloads/cinebase-wyniki.sqlite3) i [eksport SQL](downloa
 
 ## Pierwszy start bez bazy
 
-Paczka v6 nie zawiera pliku bazy. Przy starcie program sam tworzy katalog `data`, plik `cinebench.sqlite3`, tabele i indeksy. Nie trzeba uruchamiać SQL ani instalować SQLite osobno. Strona pokaże pustą bazę i przycisk wyboru pierwszych raportów. Tak samo działa nowa ścieżka podana przez `--db`, również z brakującymi katalogami. Ponowny start zachowuje zapisane rekordy.
+Paczka v7 nie zawiera pliku bazy. Przy starcie program sam tworzy katalog `data`, plik `cinebench.sqlite3`, tabele i indeksy. Nie trzeba uruchamiać SQL ani instalować SQLite osobno. Strona pokaże pustą bazę i przycisk wyboru pierwszych raportów. Tak samo działa nowa ścieżka podana przez `--db`, również z brakującymi katalogami. Ponowny start zachowuje zapisane rekordy.
 
 Plik bazy o rozmiarze zero jest inicjalizowany. Uszkodzona istniejąca baza nie jest zastępowana nową — program kończy się z czytelnym błędem, zachowując plik. Gdy chcesz rozpocząć oddzielną bazę, wskaż nową nazwę przez `--db`.
 
-Przykładowa baza 25 raportów / 62 pomiarów jest dostępna osobno w `downloads/cinebase-wyniki.sqlite3`. Można ją uruchomić poleceniem `python app.py --db downloads/cinebase-wyniki.sqlite3` po pobraniu całego repozytorium. Standardowa paczka v6 zaczyna bez przykładowych danych.
+Przykładowa baza 25 raportów / 62 pomiarów jest dostępna osobno w `downloads/cinebase-wyniki.sqlite3`. Można ją uruchomić poleceniem `python app.py --db downloads/cinebase-wyniki.sqlite3` po pobraniu całego repozytorium. Standardowa paczka v7 zaczyna bez przykładowych danych.
 
 ## Raporty i import
 
@@ -30,6 +30,7 @@ Importer sprawdzono na 25 rzeczywistych raportach, obejmujących 62 wykonane pom
 
 - Starsze raporty: Rendering Single/Multiple CPU oraz osobne kolumny Shading CINEMA 4D, OpenGL Software Lighting, Hardware Lighting i Standard. Oryginalne jednostki `CB-CPU` i `CB-GFX` pozostają bez przeliczania.
 - Raporty R11.5–2026: `CBCPU1`, `CBCPUX`, `CBOPENGL`, `CBGPU`; PEAK i ARRAY są szczegółami istniejących wyników. `MHZ_ESTIMATE=inf` nie jest wynikiem testu.
+- **Taktowanie w Cinebench 2024 i 2026:** pierwszeństwo ma MHZ. Jeśli brakuje pola, wartość jest pusta, zerowa, ujemna, tekstowa, NaN lub nieskończona, importer próbuje MHZ_ESTIMATE. Wartość musi być liczbą skończoną większą od zera (MHz; akceptowana kropka lub przecinek dziesiętny). Taktowanie z pola szacowanego jest oznaczane w notatkach. Jeśli oba pola są nieprawidłowe, clock_mhz pozostaje NULL i pozostałe dane raportu są zapisywane normalnie. Inne edycje nadal używają dotychczasowego odczytu MHZ.
 - W R11.5/R15 wątki obliczane są jako CORES × LOGICALCORES. Nowsze wersje mają THREADS. Starsze Number of CPUs wskazuje wątki renderujące, nie fizyczne rdzenie.
 - Edycja jest rozpoznawana z nagłówka albo C4DVERSION, a pełna wersja, np. 2026.100, jest zachowywana oddzielnie. Niezgodność nagłówka z C4DVERSION przerywa import.
 - System zachowuje oryginalny tekst `os` i rozpoznane `os_name`, `os_version`, `os_build`. Windows 10 z kompilacją 26100 nadal zapisuje się jako Windows 10, zgodnie z raportem. Starsze WINDOWS 64 BIT 6.2.9200 nie jest zamieniane na domniemaną wersję handlową. Obsługiwane są także macOS / Mac OS X / OS X i ich numery kompilacji.
