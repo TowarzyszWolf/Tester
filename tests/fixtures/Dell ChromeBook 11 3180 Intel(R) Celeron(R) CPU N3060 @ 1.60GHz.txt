@@ -1,0 +1,25 @@
+CINEBENCH R10
+****************************************************
+
+Tester           : Dell ChromeBook 11 3180
+
+Processor        :  Intel(R) Celeron(R) CPU N3060 @ 1.60GHz
+MHz              : 1,6 Ghz
+Number of CPUs   : 2
+Operating System : WINDOWS 64 BIT 6.2.9200
+
+Graphics Card    : Intel(R) HD Graphics 400
+Resolution       : <fill this out>
+Color Depth      : <fill this out>
+
+****************************************************
+
+Rendering (Single   CPU): 1218 CB-CPU 
+Rendering (Multiple CPU): 1837 CB-CPU 
+
+Multiprocessor Speedup: 1.51
+
+Shading (OpenGL Standard)          : 1536 CB-GFX 
+
+
+****************************************************

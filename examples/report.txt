@@ -1,0 +1,2 @@
+CPU (Multi Core): 12345 pts
+CPU (Single Core): 1234 pts

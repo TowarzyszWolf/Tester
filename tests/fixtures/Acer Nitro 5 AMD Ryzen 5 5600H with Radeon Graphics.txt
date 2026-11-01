@@ -1,0 +1,25 @@
+CINEBENCH R10
+****************************************************
+
+Tester           : Acer Nitro 5
+
+Processor        : AMD Ryzen 5 5600H with Radeon Graphics 
+MHz              : 3.3 GHz
+Number of CPUs   : 12
+Operating System : WINDOWS 64 BIT 6.2.9200
+
+Graphics Card    : NVIDIA GeForce RTX 3050 Laptop GPU/PCIe/SSE2
+Resolution       : <fill this out>
+Color Depth      : <fill this out>
+
+****************************************************
+
+Rendering (Single   CPU): 10737 CB-CPU 
+Rendering (Multiple CPU): 57586 CB-CPU 
+
+Multiprocessor Speedup: 5.36
+
+Shading (OpenGL Standard)          : 13705 CB-GFX 
+
+
+****************************************************
