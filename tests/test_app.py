@@ -34,9 +34,9 @@ class StoreTests(unittest.TestCase):
             with self.subTest(score=score), self.assertRaises(ValueError):
                 validate(result(score=score))
 
-    def test_gpu_requires_device(self):
-        with self.assertRaises(ValueError):
-            validate(result(test='GPU'))
+    def test_gpu_is_optional_for_every_mode(self):
+        for mode in ('GPU', 'CPU Multi Core', 'OpenGL'):
+            self.assertEqual(validate(result(test=mode, gpu=''))['gpu'], '')
         self.assertEqual(validate(result(test='GPU', gpu='RTX 4090'))['gpu'], 'RTX 4090')
 
     def test_batch_is_atomic(self):

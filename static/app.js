@@ -2,6 +2,10 @@ const $ = s => document.querySelector(s);
 let pending = [];
 const localDate = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 $('#manual-form input[type=date]').value = localDate();
+$('#include-gpu').addEventListener('change', e => {
+  $('#manual-gpu').hidden = !e.target.checked;
+  $('#manual-gpu input').disabled = !e.target.checked;
+});
 const extraTests = ['OpenGL', 'Shading (CINEMA 4D)', 'OpenGL Software Lighting', 'OpenGL Hardware Lighting', 'OpenGL Standard'];
 for (const select of document.querySelectorAll('select[name=test]')) for (const value of extraTests) select.add(new Option(value, value));
 for (const select of document.querySelectorAll('select[name=unit]')) for (const value of ['CB-CPU','CB-GFX']) select.add(new Option(value, value));
@@ -17,7 +21,7 @@ async function load() {
   const rows=await api('/api/results?'+params);$('#count').textContent=rows.length;$('#export').href='/api/export.csv?'+params;
   const table=$('#results');table.replaceChildren();
   if(!rows.length){const tr=node('tr','');const td=node('td','Brak wyników. Zaimportuj plik lub dodaj pierwszy pomiar.','empty');td.colSpan=6;tr.append(td);table.append(tr);}
-  for(const r of rows){const tr=node('tr','');cell(tr,r.edition,[r.test,r.benchmark_version].filter(Boolean).join(' · '));cell(tr,Number(r.score).toLocaleString('pl-PL',{maximumFractionDigits:6}),r.unit,'score');cell(tr,r.cpu,[r.system_name,r.gpu,r.cores?`${r.cores} rdzeni`:'',r.threads?`${r.threads} wątków`:'',r.clock_mhz?`${r.clock_mhz} MHz`:'',r.architecture].filter(Boolean).join(' · '));cell(tr,r.measured_at||'Data nieznana',r.os);cell(tr,r.source_file,r.notes,'notes');const td=node('td','');const b=node('button','Usuń','delete');b.type='button';b.addEventListener('click',async()=>{if(!confirm(`Usunąć wynik ${r.edition}: ${r.score} ${r.unit}?`))return;try{await api('/api/results/'+r.id,{method:'DELETE'});await load();message('Wynik usunięty.');}catch(e){message(e.message,true);}});td.append(b);tr.append(td);table.append(tr);}
+  for(const r of rows){const tr=node('tr','');cell(tr,r.edition,[r.test,r.benchmark_version].filter(Boolean).join(' · '));cell(tr,Number(r.score).toLocaleString('pl-PL',{maximumFractionDigits:6}),r.unit,'score');cell(tr,r.cpu,[r.system_name,r.gpu,r.cores?`${r.cores} rdzeni`:'',r.threads?`${r.threads} wątków`:'',r.clock_mhz?`${r.clock_mhz} MHz`:'',r.architecture].filter(Boolean).join(' · '));cell(tr,[r.os_name,r.os_version,r.os_build?'build '+r.os_build:''].filter(Boolean).join(' ')||'System nieznany',[r.os,r.measured_at||'Data nieznana'].filter(Boolean).join(' · '));cell(tr,r.source_file,r.notes,'notes');const td=node('td','');const b=node('button','Usuń','delete');b.type='button';b.addEventListener('click',async()=>{if(!confirm(`Usunąć wynik ${r.edition}: ${r.score} ${r.unit}?`))return;try{await api('/api/results/'+r.id,{method:'DELETE'});await load();message('Wynik usunięty.');}catch(e){message(e.message,true);}});td.append(b);tr.append(td);table.append(tr);}
 }
 async function busy(form, action) {const buttons=[...form.querySelectorAll('button')];buttons.forEach(b=>b.disabled=true);try{await action();}catch(e){message(e.message,true);}finally{buttons.forEach(b=>b.disabled=false);}}
 $('#filters').addEventListener('submit',e=>{e.preventDefault();load().catch(e=>message(e.message,true));});
@@ -41,7 +45,18 @@ $('#report-file').addEventListener('change',async e=>{
   }
   pending=rows;
   const preview=$('#preview');preview.replaceChildren();
-  for(const r of pending)preview.append(node('p',`${r.source_file} · ${r.edition||'Wersja do uzupełnienia'} · ${r.test} · ${r.score} ${r.unit||'(jednostka do uzupełnienia)'} · ${r.cpu||'procesor do uzupełnienia'}`));
+  for(const r of pending){
+    const entry=node('div','', 'preview-entry');
+    entry.append(node('strong',`${r.edition||'Wersja do uzupełnienia'}${r.benchmark_version?' / '+r.benchmark_version:''} · ${r.test} · ${r.score} ${r.unit||'(jednostka do uzupełnienia)'}`));
+    entry.append(node('p',`${r.cpu||'Procesor do uzupełnienia'} · ${r.gpu||'GPU nie podano (opcjonalne)'}`));
+    entry.append(node('p',`System: ${r.os||'do uzupełnienia (opcjonalnie)'}${r.os_build?' · kompilacja '+r.os_build:''}`));
+    entry.append(node('small',r.source_file));preview.append(entry);
+  }
+  for(const key of ['edition','benchmark_version','os','cpu','gpu','unit']){
+    const input=$('#import-form').elements.namedItem(key);
+    const values=[...new Set(pending.map(row=>String(row[key]||'')))];
+    input.value=values.length===1?values[0]:'';
+  }
   $('#import-form').hidden=!pending.length;
   message(`Odczytano wyników: ${pending.length}. Sprawdź podgląd. Brak daty w pliku oznacza datę nieznaną, chyba że ją uzupełnisz.\n`+info.join('\n'));
 });

@@ -17,6 +17,9 @@ CREATE TABLE IF NOT EXISTS results (
     system_name TEXT NOT NULL DEFAULT '',
     architecture TEXT NOT NULL DEFAULT '',
     source_file TEXT NOT NULL DEFAULT '',
+    os_name TEXT NOT NULL DEFAULT '',
+    os_version TEXT NOT NULL DEFAULT '',
+    os_build TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_results_group ON results(edition, test, unit);

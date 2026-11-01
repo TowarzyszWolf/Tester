@@ -3,6 +3,7 @@ import json
 import math
 import re
 from native_import import native_report
+from metadata import cinebench_edition, operating_system
 
 MODES = {
     'cb_cpu1': 'CPU Single Core', 'cb_cpux': 'CPU Multi Core',
@@ -61,5 +62,8 @@ def parse_report(body):
             raise ValueError('Plik zawiera nieprawidłowy wynik.') from None
         if not math.isfinite(score) or score <= 0:
             raise ValueError('Plik zawiera wynik niedodatni lub nieskończony.')
-        output.append(dict(item) | {'score': score, 'test': item['test']})
+        parsed = dict(item) | {'score': score, 'test': item['test']} | operating_system(item.get('os', ''))
+        if not parsed.get('edition') and parsed.get('benchmark_version'):
+            parsed['edition'] = cinebench_edition(parsed['benchmark_version'])
+        output.append(parsed)
     return output

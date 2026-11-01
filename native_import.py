@@ -1,6 +1,7 @@
 """Adapters verified against the user's native Cinebench 2003–2026 reports."""
 import math
 import re
+from metadata import cinebench_edition, operating_system
 
 
 def edition_name(value):
@@ -21,11 +22,14 @@ def number(value, field):
 def native_report(text):
     """Return None for an unrelated format, [] for a recognized empty report."""
     modern = re.search(r'(?im)^COMMENT=These are your MAXON CINEBENCH R(11\.5|15|20|23|2024|2026) results\.', text)
+    full_version = re.search(r'(?im)^C4DVERSION\s*=\s*([^\n]+)', text)
+    inferred = cinebench_edition(full_version[1]) if full_version else ''
+    native_fields = re.search(r'(?m)^PROCESSOR=', text) and re.search(r'(?m)^CB(?:CPU1|CPUX|GPU|OPENGL)=', text)
     legacy = re.search(r'(?im)^CINEBENCH\s+(2003(?:\s+v\d+)?|9\.5|R10)\s*$', text)
-    if not modern and not legacy:
+    if not modern and not legacy and not (inferred and native_fields):
         return None
     rows = []
-    if modern:
+    if modern or (inferred and native_fields):
         fields = {}
         for line in text.splitlines():
             key, sep, value = line.partition('=')
@@ -34,7 +38,9 @@ def native_report(text):
             if key in fields:
                 raise ValueError(f'Powtórzone pole {key} w raporcie.')
             fields[key] = value.strip()
-        edition = edition_name(modern[1])
+        edition = edition_name(modern[1]) if modern else inferred
+        if inferred and edition != inferred:
+            raise ValueError('Wersja Cinebench w nagłówku nie zgadza się z C4DVERSION.')
         cores = fields.get('CORES', '')
         threads = fields.get('THREADS', '')
         if not threads and cores and fields.get('LOGICALCORES'):
@@ -94,4 +100,4 @@ def native_report(text):
             score = number(match[1], mode)
             if score:
                 rows.append(common | dict(test=mode, score=score, unit=unit, notes=f'MHz (z pliku): {mhz}'))
-    return rows
+    return [row | operating_system(row.get('os', '')) for row in rows]

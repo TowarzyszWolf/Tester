@@ -12,10 +12,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 from importers import parse_report
+from metadata import cinebench_edition, operating_system
 
 ROOT = Path(__file__).resolve().parent
 OLD_FIELDS = ('edition', 'test', 'score', 'unit', 'cpu', 'gpu', 'threads', 'os', 'measured_at', 'notes')
-FIELDS = OLD_FIELDS + ('cores', 'clock_mhz', 'benchmark_version', 'system_name', 'architecture', 'source_file')
+FIELDS = OLD_FIELDS + ('cores', 'clock_mhz', 'benchmark_version', 'system_name', 'architecture', 'source_file', 'os_name', 'os_version', 'os_build')
 TESTS = ('CPU Single Core', 'CPU Multi Core', 'GPU', 'OpenGL', 'Shading (CINEMA 4D)', 'OpenGL Software Lighting', 'OpenGL Hardware Lighting', 'OpenGL Standard')
 UNITS = ('pts', 'cb', 'fps', 'CB-CPU', 'CB-GFX')
 MAX_BODY = 2 * 1024 * 1024
@@ -32,12 +33,22 @@ def validate(raw):
         result[key] = str(value).strip()
         if len(result[key]) > (4000 if key == 'notes' else 255):
             raise ValueError(f'Pole {key} jest za długie.')
+    detected = cinebench_edition(result['benchmark_version'])
+    if not result['edition'] and detected:
+        result['edition'] = detected
+    entered = cinebench_edition(result['edition'])
+    if detected and entered and detected != entered:
+        raise ValueError('Edycja Cinebench nie zgadza się z pełną wersją programu.')
+    if entered:
+        if not result['benchmark_version'] and result['edition'].upper().removeprefix('R') != entered.upper().removeprefix('R'):
+            result['benchmark_version'] = result['edition']
+        result['edition'] = entered
+    if result['os']:
+        result.update(operating_system(result['os']))
     if not result['edition'] or not result['cpu']:
         raise ValueError('Podaj wersję Cinebench i procesor.')
     if result['test'] not in TESTS or result['unit'] not in UNITS:
         raise ValueError('Nieprawidłowy tryb testu lub jednostka.')
-    if result['test'] == 'GPU' and not result['gpu']:
-        raise ValueError('Dla testu GPU podaj kartę graficzną.')
     try:
         result['score'] = float(result['score'].replace(',', '.'))
     except ValueError:
@@ -86,7 +97,17 @@ class Store:
                 conn.execute(f'INSERT INTO results ({shared}) SELECT {shared} FROM results_legacy')
                 conn.execute('DROP TABLE results_legacy')
                 conn.execute('CREATE INDEX IF NOT EXISTS idx_results_group ON results(edition, test, unit)')
-            conn.execute('PRAGMA user_version = 2')
+            columns = {row['name'] for row in conn.execute('PRAGMA table_info(results)')}
+            backfill_os = migrate or any(column not in columns for column in ('os_name', 'os_version', 'os_build'))
+            for column in ('os_name', 'os_version', 'os_build'):
+                if column not in columns:
+                    conn.execute(f"ALTER TABLE results ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
+            if backfill_os:
+                for row in conn.execute('SELECT id, os FROM results').fetchall():
+                    detected_os = operating_system(row['os'])
+                    conn.execute('UPDATE results SET os_name=?, os_version=?, os_build=? WHERE id=?',
+                                 (*detected_os.values(), row['id']))
+            conn.execute('PRAGMA user_version = 3')
 
     @contextmanager
     def connect(self):
