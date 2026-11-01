@@ -4,7 +4,7 @@ Lokalna aplikacja po polsku, Python 3.12+, SQLite, bez dodatkowych bibliotek. Je
 
 ## Pobieranie i start
 
-[Pobierz program v7 — start z pustą bazą](https://github.com/TowarzyszWolf/Tester/raw/refs/heads/main/downloads/cinebase-v7.zip). Rozpakuj do nowego folderu. W katalogu programu uruchom:
+[Pobierz program v8 — start z pustą bazą](https://github.com/TowarzyszWolf/Tester/raw/refs/heads/main/downloads/cinebase-v8.zip). Rozpakuj do nowego folderu. W katalogu programu uruchom:
 
 ```sh
 python app.py
@@ -16,11 +16,11 @@ Osobno: [baza SQLite](downloads/cinebase-wyniki.sqlite3) i [eksport SQL](downloa
 
 ## Pierwszy start bez bazy
 
-Paczka v7 nie zawiera pliku bazy. Przy starcie program sam tworzy katalog `data`, plik `cinebench.sqlite3`, tabele i indeksy. Nie trzeba uruchamiać SQL ani instalować SQLite osobno. Strona pokaże pustą bazę i przycisk wyboru pierwszych raportów. Tak samo działa nowa ścieżka podana przez `--db`, również z brakującymi katalogami. Ponowny start zachowuje zapisane rekordy.
+Paczka v8 nie zawiera pliku bazy. Przy starcie program sam tworzy katalog `data`, plik `cinebench.sqlite3`, tabele i indeksy. Nie trzeba uruchamiać SQL ani instalować SQLite osobno. Strona pokaże pustą bazę i przycisk wyboru pierwszych raportów. Tak samo działa nowa ścieżka podana przez `--db`, również z brakującymi katalogami. Ponowny start zachowuje zapisane rekordy.
 
 Plik bazy o rozmiarze zero jest inicjalizowany. Uszkodzona istniejąca baza nie jest zastępowana nową — program kończy się z czytelnym błędem, zachowując plik. Gdy chcesz rozpocząć oddzielną bazę, wskaż nową nazwę przez `--db`.
 
-Przykładowa baza 25 raportów / 62 pomiarów jest dostępna osobno w `downloads/cinebase-wyniki.sqlite3`. Można ją uruchomić poleceniem `python app.py --db downloads/cinebase-wyniki.sqlite3` po pobraniu całego repozytorium. Standardowa paczka v7 zaczyna bez przykładowych danych.
+Przykładowa baza 25 raportów / 62 pomiarów jest dostępna osobno w `downloads/cinebase-wyniki.sqlite3`. Można ją uruchomić poleceniem `python app.py --db downloads/cinebase-wyniki.sqlite3` po pobraniu całego repozytorium. Standardowa paczka v8 zaczyna bez przykładowych danych.
 
 ## Raporty i import
 
@@ -43,17 +43,21 @@ Obsługiwane są również uproszczone wiersze `CPU (Multi Core): 12345 pts` i J
 
 ## Rankingi CPU i GPU oraz historia modelu
 
-Dwa niezależne panele pokazują rankingi procesorów i kart graficznych. W każdym wybierz edycję Cinebench, rodzaj testu, pełną wersję programu i jednostkę. Domyślnie wybierana jest najnowsza dostępna edycja oraz pełna wersja z pomiarem danego rodzaju. CPU domyślnie pokazuje Multi Core; GPU pokazuje test GPU, a gdy go nie ma — dostępny starszy test graficzny, np. OpenGL. Testy Single Core, Multi Core, renderowania GPU i historyczne testy graficzne mają osobne rankingi.
+Dwa niezależne panele pokazują rankingi procesorów i kart graficznych. Wybierz edycję Cinebench, rodzaj testu, producenta i sposób sortowania. Nie ma wyboru pełnego wydania ani jednostki. Ranking łączy wydania tej samej edycji, np. R23.105 i R23.200. Domyślnie wybierana jest najnowsza dostępna edycja. CPU domyślnie pokazuje Multi Core; GPU pokazuje renderowanie GPU lub dostępny starszy test graficzny, np. OpenGL. Single Core, Multi Core i poszczególne testy graficzne mają osobne rankingi.
 
-Nowy raport automatycznie zasila rankingi odpowiadające jego pomiarom. Rankingi są wyliczane z bazy na bieżąco, więc zapis z formularza, pliku lub CSV oraz usunięcie raportu od razu aktualizują zestawienia. Nie trzeba osobno przypisywać pomiarów do modeli ani odbudowywać rankingu. Jeden plik nadal jest jednym rekordem w bazie, nawet jeśli zasila więcej niż jeden ranking.
+Jednostka jest dobierana automatycznie do edycji i testu: CPU w 2003/9.5/R10 używa CB-CPU, w R11.5/R15 cb, a w R20/R23/2024/2026 pts. Etykiety CPU `cb`, `pts` i `CB-CPU` są traktowane jako nazwy punktów wewnątrz tej samej edycji, bez zmiany liczby punktów. Oryginalne etykiety pozostają w raportach. Renderowanie GPU używa pts, OpenGL fps, a starsze testy Shading / OpenGL Lighting / Standard CB-GFX. Nie są łączone różne edycje, testy ani niezgodne jednostki (np. CPU w fps). Jeśli rzeczywisty zapis ma niezgodną jednostkę, ranking pomija ten pomiar i podaje liczbę pominiętych; raport zostaje w archiwum. Dla własnych nazw edycji CPU automatycznie wybierana jest najczęściej występująca jednostka.
 
-Modele są porządkowane malejąco według średniej arytmetycznej dostępnych wyników. Nazwy są porównywane bez wielkości liter i nadmiarowych spacji, z zachowaniem innych różnic. Obok wyniku jest liczba pomiarów. Średnia i kolejność używają pełnej precyzji, a wyświetlanie dwóch miejsc po przecinku. Dokładne remisy współdzielą miejsce (1, 1, 3). Wersje, jednostki i testy nie są łączone. Brak modelu GPU nie blokuje zapisu raportu, ale jego pomiar nie tworzy anonimowego wpisu w rankingu GPU.
+Nowy raport automatycznie zasila odpowiednie rankingi. Zapis z formularza, pliku lub CSV oraz usunięcie raportu od razu aktualizują zestawienia. Jeden plik nadal jest jednym rekordem, nawet jeśli zawiera kilka testów.
 
-Kliknij nazwę CPU lub GPU w rankingu albo archiwum, aby otworzyć historię tego modelu. Pokazuje ona **wszystkie zapisane raporty ze wszystkich edycji Cinebench**, podzielone na edycje, z pełnymi wersjami, pomiarami, systemem, datą, plikiem źródłowym i notatkami. Historia zawiera także częściowe raporty z nazwą tego modelu, w których nie wykonano odpowiedniego testu. Osobne podsumowania średnich zachowują rozdział wersji/testu/jednostki. Wyszukiwanie modelu jest dokładne po normalizacji nazwy — kliknięcie CPU A nie otwiera CPU A Plus. Filtry archiwum i aktualna wersja rankingu nie zawężają historii modelu.
+Modele są domyślnie porządkowane malejąco według średniej. Można wybrać **Producent A–Z**, **Producent Z–A** oraz filtr konkretnego producenta. W obrębie producenta modele pozostają uporządkowane według wyniku. Numer miejsca zawsze wynika z porównania wyników całej edycji/testu, także po sortowaniu lub filtrowaniu producentów. Dokładne remisy współdzielą miejsce (1, 1, 3). Średnia używa pełnej precyzji; widok pokazuje dwa miejsca po przecinku oraz liczbę pomiarów.
 
-Historia jest lokalnym oknem dialogowym; zamknij przyciskiem Zamknij lub klawiszem Escape. Pusta baza pokazuje puste rankingi, które uzupełnią się po pierwszym imporcie. Nie ma dodatkowej migracji danych z v5.
+Producent układu jest rozpoznawany z nazwy modelu, m.in. Intel, AMD, NVIDIA, Apple, ATI i Qualcomm. Nazwa partnera produkującego kartę, np. ASUS przy GeForce, nie zastępuje producenta układu NVIDIA. Nierozpoznane nazwy są oznaczane **Nieznany** i przy sortowaniu po producencie trafiają na koniec. Sama nazwa PowerPC nie pozwala ustalić producenta konkretnego procesora, więc nie jest automatycznie oznaczana jako Apple. Rozpoznanie jest obliczane na bieżąco, bez zmiany oryginalnych danych ani migracji bazy.
 
-API: `GET /api/rankings?device=cpu&edition=R23&metric=cpu_multi&benchmark_version=23.200&unit=pts`, `GET /api/hardware?device=gpu&model=...`. Wyniki rankingów są widokami, bez osobnych kopii raportów w bazie.
+Kliknij CPU lub GPU w rankingu albo archiwum, aby otworzyć **wszystkie raporty tego modelu ze wszystkich edycji Cinebench**. Historia zachowuje pełne wydania, oryginalne jednostki, pomiary, systemy, daty, źródła i notatki. Podsumowania historii nadal rozdzielają pełne wydania i jednostki, aby umożliwić prześledzenie pomiarów składających się na ranking całej edycji. Filtry rankingu ani archiwum nie ograniczają historii. Nazwy modeli są dopasowywane dokładnie po pominięciu wielkości liter i nadmiarowych spacji; CPU A i CPU A Plus pozostają osobnymi modelami.
+
+Historia zamyka się przyciskiem Zamknij lub klawiszem Escape. Brak nazwy GPU nie blokuje raportu, ale nie tworzy anonimowego modelu w rankingu GPU. Puste rankingi uzupełniają się po pierwszym imporcie.
+
+API: `GET /api/rankings?device=cpu&edition=R23&metric=cpu_multi&sort=manufacturer_asc&manufacturer=Intel`, `GET /api/hardware?device=gpu&model=...`. Ranking jest widokiem nad raportami, bez dodatkowych kopii rekordów.
 
 ## Sortowanie i średnie
 

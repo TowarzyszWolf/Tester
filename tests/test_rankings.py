@@ -24,12 +24,14 @@ class RankingTests(unittest.TestCase):
         self.assertEqual([(r['model'],r['score'],r['count'],r['rank']) for r in data['rows']], [('CPU B',250,1,1),('CPU A',200,2,2)])
         self.assertEqual((data['rows'][1]['best'],data['rows'][1]['worst']),(300,100))
 
-    def test_full_versions_units_and_metrics_do_not_mix(self):
-        self.store.add([result(cpu_multi=100,benchmark_version='23.200'),result(cpu_multi=900,benchmark_version='23.105'),result(cpu_multi=5,cpu_multi_unit='cb',benchmark_version='23.200'),result(cpu_multi=9999,edition='2026',benchmark_version='2026.100')])
-        data=ranking(self.reports(),dict(device='cpu',edition='R23',metric='cpu_multi',benchmark_version='23.200',unit='pts'))
-        self.assertEqual(data['rows'][0]['score'],100)
-        self.assertEqual(data['benchmark_versions'],['23.200','23.105'])
-        self.assertEqual(set(data['units']),{'pts','cb'})
+    def test_full_versions_merge_but_editions_metrics_and_incompatible_units_do_not(self):
+        self.store.add([result(cpu_multi=100,benchmark_version='23.200'),result(cpu_multi=900,benchmark_version='23.105'),result(cpu_multi=5,cpu_multi_unit='fps',benchmark_version='23.200'),result(cpu_multi=9999,edition='2026',benchmark_version='2026.100')])
+        data=ranking(self.reports(),dict(device='cpu',edition='R23',metric='cpu_multi'))
+        self.assertEqual((data['rows'][0]['score'],data['rows'][0]['count']),(500,2))
+        self.assertEqual(data['unit'],'pts')
+        self.assertEqual(data['excluded_unit_count'],1)
+        self.assertNotIn('benchmark_version',data['selected'])
+        self.assertNotIn('unit',data['selected'])
         empty=ranking(self.reports(),dict(device='cpu',edition='R23',metric='cpu_single'))
         self.assertEqual(empty['rows'],[])
 
@@ -46,7 +48,7 @@ class RankingTests(unittest.TestCase):
         from importers import parse_report
         self.store.add(parse_report(fixture('Apple Power Mac G4-CR2003').read_bytes()))
         data=ranking(self.reports(),{'device':'gpu','edition':'2003','metric':'opengl_hardware'})
-        self.assertEqual(data['selected']['unit'],'CB-GFX')
+        self.assertEqual(data['unit'],'CB-GFX')
         self.assertEqual(data['rows'][0]['score'],80)
         self.assertEqual(ranking(self.reports(),{'device':'gpu','metric':'opengl_software'})['rows'][0]['score'],142)
 
@@ -58,11 +60,12 @@ class RankingTests(unittest.TestCase):
         with self.assertRaises(ValueError):ranking(self.reports(),{'device':'invalid'})
         with self.assertRaises(ValueError):ranking(self.reports(),{'device':'cpu','metric':'gpu_score'})
 
-    def test_default_editions_and_builds_ordered_chronologically(self):
+    def test_latest_edition_default_combines_all_builds(self):
         self.store.add([result(edition='2003'),result(edition='R23'),result(edition='2026',benchmark_version='2026.9'),result(edition='2026',benchmark_version='2026.100')])
         data=ranking(self.reports(),{'device':'cpu'})
         self.assertEqual(data['editions'],['2026','R23','2003'])
-        self.assertEqual(data['selected']['benchmark_version'],'2026.100')
+        self.assertEqual(data['selected']['edition'],'2026')
+        self.assertEqual(data['rows'][0]['count'],2)
 
     def test_history_includes_all_editions_exact_model_and_original_rows(self):
         self.store.add([result(cpu='CPU A',edition='R20',benchmark_version='20.040',source_file='old.txt'),result(cpu='cpu a',edition='R23',benchmark_version='23.200',source_file='new.txt'),result(cpu='CPU A Plus'),result(cpu='Other',gpu='CPU A')])

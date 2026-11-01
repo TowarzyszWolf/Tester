@@ -128,13 +128,11 @@ function hardwareButton(device,model){
 function modelCell(row,device,model,secondary){const td=node('td','');if(model)td.append(hardwareButton(device,model));else td.append(node('strong','—'));if(secondary)td.append(node('small',secondary));row.append(td);}
 for(const device of ['cpu','gpu']){
   const form=$('#ranking-'+device+'-filters');
-  for(const [key,title] of [['edition','Edycja Cinebench'],['metric','Rodzaj testu'],['benchmark_version','Pełna wersja'],['unit','Jednostka']]){
+  for(const [key,title] of [['edition','Edycja Cinebench'],['metric','Rodzaj testu'],['manufacturer','Producent'],['sort','Sortowanie']]){
     const label=node('label',title);const select=document.createElement('select');select.name=key;label.append(select);form.append(label);
     select.addEventListener('change',()=>{
       const state=rankingViews[device];state.params={...state.params,[key]:select.value};
-      if(key==='edition'){delete state.params.metric;delete state.params.benchmark_version;delete state.params.unit;}
-      if(key==='metric'){delete state.params.benchmark_version;delete state.params.unit;}
-      if(key==='benchmark_version')delete state.params.unit;
+      if(key==='edition')delete state.params.metric;
       loadRanking(device);
     });
   }
@@ -152,16 +150,21 @@ async function loadRanking(device){
   const status=$('#ranking-'+device+'-status');
   try{
     const data=await api('/api/rankings?'+new URLSearchParams({device,...state.params}));if(generation!==state.generation)return;
-    state.params=data.editions.length?{...data.selected}:{};
+    state.params=data.editions.length?{...data.selected}:{sort:data.selected.sort,manufacturer:data.selected.manufacturer};
     const form=$('#ranking-'+device+'-filters');
     rankingOptions(form.elements.edition,data.editions,data.selected.edition);
     rankingOptions(form.elements.metric,data.metrics,data.selected.metric,key=>metrics[key]||key);
-    rankingOptions(form.elements.benchmark_version,data.benchmark_versions,data.selected.benchmark_version);
-    rankingOptions(form.elements.unit,data.units,data.selected.unit);
-    $('#ranking-'+device+'-count').textContent=data.rows.length+' modeli';
-    status.textContent=data.rows.length?'Średnia z dostępnych pomiarów. Kliknij model, aby zobaczyć historię.':'Brak pomiarów w tym rankingu. Zaimportuj odpowiedni raport lub wybierz inną wersję/test.';
+    const brand=form.elements.manufacturer;brand.replaceChildren(new Option('Wszyscy producenci',''));
+    for(const name of data.manufacturers)brand.add(new Option(name,name));
+    if(data.selected.manufacturer&&!data.manufacturers.includes(data.selected.manufacturer))brand.add(new Option(data.selected.manufacturer+' — brak wyników',data.selected.manufacturer));
+    brand.value=data.selected.manufacturer;
+    const sort=form.elements.sort;sort.replaceChildren();
+    for(const [value,label] of [['score','Wynik malejąco'],['manufacturer_asc','Producent A–Z'],['manufacturer_desc','Producent Z–A']])sort.add(new Option(label,value));
+    sort.value=data.selected.sort;
+    const n=data.rows.length;$('#ranking-'+device+'-count').textContent=n+' '+(n===1?'model':n%10>=2&&n%10<=4&&(n%100<12||n%100>14)?'modele':'modeli');
+    status.textContent=(data.rows.length?'Średnia z pomiarów całej edycji. Kliknij model, aby zobaczyć historię.':'Brak pomiarów w tym rankingu. Zaimportuj raport lub wybierz inną edycję/test/producenta.')+(data.excluded_unit_count?' Pominięto pomiary z niezgodną jednostką: '+data.excluded_unit_count+'.':'');
     const body=$('#ranking-'+device+'-rows');body.replaceChildren();
-    for(const row of data.rows){const tr=node('tr','');cell(tr,String(row.rank));const model=node('td','');model.append(hardwareButton(device,row.model));tr.append(model);cell(tr,formatScore(row.score),data.selected.unit,'score');cell(tr,String(row.count));body.append(tr);}
+    for(const row of data.rows){const tr=node('tr','');cell(tr,String(row.rank));cell(tr,row.manufacturer,'','manufacturer');const model=node('td','');model.append(hardwareButton(device,row.model));tr.append(model);cell(tr,formatScore(row.score),data.unit,'score');cell(tr,String(row.count));body.append(tr);}
   }catch(error){if(generation===state.generation){status.textContent='Nie można odczytać rankingu: '+error.message;$('#ranking-'+device+'-rows').replaceChildren();}}
 }
 function openHardware(device,model){
@@ -176,7 +179,7 @@ async function loadHardware(){
   $('#hardware-status').textContent='Wczytywanie zapisanych raportów…';$('#hardware-content').replaceChildren();
   try{
     const data=await api('/api/hardware?'+new URLSearchParams(requested));if(generation!==hardwareGeneration)return;
-    $('#hardware-title').textContent=data.model;$('#hardware-status').textContent=`Raporty: ${data.record_count}. Edycje: ${data.editions.join(', ')||'brak'}. Historia obejmuje wszystkie zapisane wersje, niezależnie od filtrów rankingu i archiwum.`;
+    $('#hardware-title').textContent=data.model;$('#hardware-status').textContent=`Raporty: ${data.record_count}. Producent: ${data.manufacturer}. Edycje: ${data.editions.join(', ')||'brak'}. Historia obejmuje wszystkie zapisane wersje, niezależnie od filtrów rankingu i archiwum.`;
     const content=$('#hardware-content');
     if(!data.reports.length){content.append(node('p','Nie ma już raportów tego modelu w bazie.'));return;}
     for(const edition of data.editions){
