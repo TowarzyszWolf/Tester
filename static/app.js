@@ -1,6 +1,7 @@
 const $ = s => document.querySelector(s);
 const metrics = {cpu_single:'CPU Single Core',cpu_multi:'CPU Multi Core',gpu_score:'GPU',opengl:'OpenGL',shading:'Shading (CINEMA 4D)',opengl_software:'OpenGL Software Lighting',opengl_hardware:'OpenGL Hardware Lighting',opengl_standard:'OpenGL Standard'};
 const formatScore = value => value===null || value===undefined || value==='' ? '—' : Number(value).toLocaleString('pl-PL',{minimumFractionDigits:2,maximumFractionDigits:2});
+const hardwareInfo = report => (report.system_name||'').trim() || 'brak informacji';
 let pending=[],readErrors=[],selection=0,readController=null,loadGeneration=0;
 const d=new Date();$('#manual-form input[type=date]').value=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 $('#include-gpu').addEventListener('change',e=>{const box=$('#manual-gpu');box.hidden=!e.target.checked;box.querySelectorAll('input,select').forEach(el=>el.disabled=!e.target.checked);});
@@ -21,7 +22,7 @@ async function load(){
   const table=$('#results');table.replaceChildren();
   if(!rows.length){const tr=node('tr','');const td=node('td','Brak raportów lub pomiarów spełniających wybrane filtry.','empty');td.colSpan=14;tr.append(td);table.append(tr);}
   for(const r of rows){
-    const tr=node('tr','');modelCell(tr,'cpu',r.cpu,grouped&&r.group_by==='gpu'?'Średnie tylko testów graficznych':r.system_name);modelCell(tr,'gpu',r.gpu,grouped&&r.group_by==='cpu'?'Średnie tylko testów CPU':'');cell(tr,r.edition,r.benchmark_version);
+    const tr=node('tr','');modelCell(tr,'cpu',r.cpu,grouped&&r.group_by==='gpu'?'Średnie tylko testów graficznych':grouped?'':'Informacje o sprzęcie: '+hardwareInfo(r));modelCell(tr,'gpu',r.gpu,grouped&&r.group_by==='cpu'?'Średnie tylko testów CPU':'');cell(tr,r.edition,r.benchmark_version);
     for(const key of Object.keys(metrics))cell(tr,formatScore(r[key]),r[key]===null?'':`${r[key+'_unit']||''}${grouped?' · n='+r.counts[key]:''}`,'score');
     cell(tr,[r.os_name,r.os_version,r.os_build?'build '+r.os_build:''].filter(Boolean).join(' '),grouped?'Różne konfiguracje':r.os);cell(tr,grouped?`${r.report_count} raportów`:r.source_file,grouped?'Średnia arytmetyczna':r.measured_at||'Data nieznana','notes');
     const td=node('td','');
@@ -44,7 +45,7 @@ function renderPending(){
     const entry=node('div','','preview-entry');
     entry.append(node('strong',`${r.edition||'Wersja do uzupełnienia'} / ${r.benchmark_version||'—'} · ${r.cpu||'CPU do uzupełnienia'}`));
     entry.append(node('p',Object.entries(metrics).filter(([key])=>r[key]!==undefined&&r[key]!==null&&r[key]!=='').map(([key,label])=>`${label}: ${formatScore(r[key])} ${r[key+'_unit']||''}`).join(' · ')||'Brak wykonanych testów — zapisany zostanie raport bez pomiarów.'));
-    entry.append(node('p',`GPU: ${r.gpu||'nie podano (opcjonalne)'} · System: ${r.os||'nieznany'}`),node('small',r.source_file));
+    entry.append(node('p',`GPU: ${r.gpu||'nie podano (opcjonalne)'} · System: ${r.os||'nieznany'}`),node('p','Informacje o sprzęcie: '+hardwareInfo(r)),node('small',r.source_file));
     if(r._error)entry.append(node('p',r._error,'import-error'));
     preview.append(entry);
   }
@@ -187,12 +188,12 @@ async function loadHardware(){
       const summaries=data.summaries.filter(r=>r.edition===edition);
       for(const summary of summaries)section.append(node('p',`${summary.benchmark_version||'Pełna wersja nieznana'} · ${metrics[summary.metric]}: średnio ${formatScore(summary.score)} ${summary.unit} · n=${summary.count}`));
       const wrap=node('div','','table-wrap'),table=document.createElement('table'),head=document.createElement('thead'),header=document.createElement('tr');
-      for(const label of ['Pełna wersja',...Object.values(metrics),'CPU','GPU','System / data','Plik źródłowy'])header.append(node('th',label));
+      for(const label of ['Pełna wersja',...Object.values(metrics),'CPU','GPU','Informacje o sprzęcie','System / data','Plik źródłowy'])header.append(node('th',label));
       head.append(header);table.append(head);const body=document.createElement('tbody');
       for(const report of data.reports.filter(r=>r.edition===edition)){
         const tr=node('tr','');cell(tr,report.benchmark_version);
         for(const key of Object.keys(metrics))cell(tr,formatScore(report[key]),report[key]===null?'':report[key+'_unit'],'score');
-        cell(tr,report.cpu);cell(tr,report.gpu);cell(tr,report.os,[report.measured_at||'Data nieznana',report.system_name].filter(Boolean).join(' · '));
+        cell(tr,report.cpu);cell(tr,report.gpu);cell(tr,hardwareInfo(report),'','notes');cell(tr,report.os,report.measured_at||'Data nieznana');
         const source=node('td','','notes');source.append(node('strong',report.source_file||'Raport ręczny'));
         if(report.notes){const details=node('details','');details.append(node('summary','Szczegóły'),node('p',report.notes));source.append(details);}tr.append(source);body.append(tr);
       }

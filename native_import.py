@@ -70,7 +70,7 @@ def native_report(text):
         common = dict(edition=edition, cpu=fields.get('PROCESSOR', ''),
                       gpu=fields.get('GPUCARD') or fields.get('OPENGLCARD', ''),
                       cores=cores, threads=threads, clock_mhz=clock_mhz, notes='\n'.join(notes),
-                      os=fields.get('OSVERSION', ''), system_name=fields.get('C4DINFO', ''),
+                      os=fields.get('OSVERSION', ''), system_name=fields.get('C4DINFO', '').strip() or 'brak informacji',
                       architecture=fields.get('CBTYPE', ''), benchmark_version=fields.get('C4DVERSION', ''))
         for key, mode, unit in (
             ('CBCPU1', 'CPU Single Core', 'cb' if edition in ('R11.5', 'R15') else 'pts'),
