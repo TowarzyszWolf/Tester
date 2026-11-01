@@ -48,7 +48,7 @@ class MetadataTests(unittest.TestCase):
             parse_report(body)
 
     def test_manual_and_json_infer_versions(self):
-        row = validate(result(edition='', benchmark_version='2026.100', os='Windows 11 (build 26100)', test='GPU', gpu=''))
+        row = validate(result(edition='', benchmark_version='2026.100', os='Windows 11 (build 26100)', gpu_score=100, gpu_score_unit='pts', gpu=''))
         self.assertEqual(row['edition'], '2026')
         self.assertEqual(row['os_build'], '26100')
         row = validate(result(edition='2026.100'))
@@ -67,7 +67,7 @@ class MetadataTests(unittest.TestCase):
             store=Store(path)
             row=store.list({})[0]
             self.assertEqual((row['id'],row['os_version'],row['os_build'],row['notes'],row['created_at']), (1,'10','19045','Keep','original'))
-            store.add([result(test='GPU',gpu='',os='macOS: Version 10.14.6 (Build 18G6032)')])
+            store.add([result(gpu_score=100,gpu_score_unit='pts',gpu='',os='macOS: Version 10.14.6 (Build 18G6032)')])
             rows=Store(path).list({})
             self.assertEqual(len(rows),2)
-            self.assertEqual(rows[0]['os_version'],'10.14.6')
+            self.assertEqual(next(r for r in rows if r['os_name']=='macOS')['os_version'],'10.14.6')

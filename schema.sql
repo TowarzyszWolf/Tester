@@ -1,15 +1,11 @@
-PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS results (
     id INTEGER PRIMARY KEY,
-    edition TEXT NOT NULL,
-    test TEXT NOT NULL CHECK(test IN ('CPU Single Core', 'CPU Multi Core', 'GPU', 'OpenGL', 'Shading (CINEMA 4D)', 'OpenGL Software Lighting', 'OpenGL Hardware Lighting', 'OpenGL Standard')),
-    score REAL NOT NULL CHECK(score > 0),
-    unit TEXT NOT NULL CHECK(unit IN ('pts', 'cb', 'fps', 'CB-CPU', 'CB-GFX')),
-    cpu TEXT NOT NULL,
+    edition TEXT NOT NULL DEFAULT '',
+    cpu TEXT NOT NULL DEFAULT '',
     gpu TEXT NOT NULL DEFAULT '',
     threads INTEGER CHECK(threads > 0),
     os TEXT NOT NULL DEFAULT '',
-    measured_at TEXT NOT NULL,
+    measured_at TEXT NOT NULL DEFAULT '',
     notes TEXT NOT NULL DEFAULT '',
     cores INTEGER CHECK(cores > 0),
     clock_mhz REAL CHECK(clock_mhz > 0),
@@ -20,6 +16,22 @@ CREATE TABLE IF NOT EXISTS results (
     os_name TEXT NOT NULL DEFAULT '',
     os_version TEXT NOT NULL DEFAULT '',
     os_build TEXT NOT NULL DEFAULT '',
+    cpu_single REAL CHECK(cpu_single > 0),
+    cpu_single_unit TEXT NOT NULL DEFAULT '',
+    cpu_multi REAL CHECK(cpu_multi > 0),
+    cpu_multi_unit TEXT NOT NULL DEFAULT '',
+    gpu_score REAL CHECK(gpu_score > 0),
+    gpu_score_unit TEXT NOT NULL DEFAULT '',
+    opengl REAL CHECK(opengl > 0),
+    opengl_unit TEXT NOT NULL DEFAULT '',
+    shading REAL CHECK(shading > 0),
+    shading_unit TEXT NOT NULL DEFAULT '',
+    opengl_software REAL CHECK(opengl_software > 0),
+    opengl_software_unit TEXT NOT NULL DEFAULT '',
+    opengl_hardware REAL CHECK(opengl_hardware > 0),
+    opengl_hardware_unit TEXT NOT NULL DEFAULT '',
+    opengl_standard REAL CHECK(opengl_standard > 0),
+    opengl_standard_unit TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
-CREATE INDEX IF NOT EXISTS idx_results_group ON results(edition, test, unit);
+CREATE INDEX IF NOT EXISTS idx_results_hardware ON results(edition, cpu, gpu);

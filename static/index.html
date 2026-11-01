@@ -7,7 +7,7 @@
 <div class="hero"><div class="eyebrow">CINEBENCH / 2003–2026</div><h1>Każdy wynik.<br>W jednym miejscu.</h1><p>Archiwum wydajności Twojego sprzętu. Importuj pomiary,<br>zapisuj konfiguracje i przeglądaj historię testów.</p></div>
 <div id="message" role="status" aria-live="polite"></div>
 <section class="panel"><div class="section-head"><div><span class="eyebrow">01 / DODAWANIE DANYCH</span><h2>Importuj plik wynikowy</h2></div><span class="tag">Najpierw podgląd, potem zapis</span></div>
-<p>Wybierz jeden lub wiele raportów Cinebench 2003, 9.5, R10, R11.5, R15, R20, R23, 2024 lub 2026. Odczytamy wersję, sprzęt i wykonane testy. Zera i niewykonane pomiary są pomijane.</p>
+<p>Wybierz jeden lub wiele raportów Cinebench 2003, 9.5, R10, R11.5, R15, R20, R23, 2024 lub 2026. Odczytamy wersję, sprzęt i wykonane testy. Jeden plik tworzy jeden rekord, a niewykonane testy pozostają puste.</p>
 <label class="drop">↑ <strong>Wybierz pliki wynikowe</strong><input id="report-file" type="file" multiple><span id="file-name">TXT, JSON lub tekstowy plik rankingu · maks. 2 MB</span></label>
 <form id="import-form" hidden>
 <h3>Uzupełnij brakujące dane</h3><p>Dane obecne w pliku mają pierwszeństwo. Pliki nie zawierają daty pomiaru — zostaw ją pustą, jeśli jest nieznana.</p>
@@ -24,9 +24,14 @@
 <details><summary>Dodaj wynik ręcznie</summary><form id="manual-form"><div class="grid">
 <label>Wersja Cinebench<input name="edition" list="editions" required placeholder="np. 2003, R23, 2026"></label>
 <label>Pełna wersja Cinebench (opcjonalna)<input name="benchmark_version" placeholder="np. 2026.100"></label>
-<label>Tryb testu<select name="test"><option>CPU Multi Core</option><option>CPU Single Core</option><option>GPU</option></select></label>
-<label>Wynik<input name="score" inputmode="decimal" required placeholder="np. 12345,67"></label>
-<label>Jednostka<select name="unit"><option>pts</option><option>cb</option><option>fps</option></select></label>
+<label>CPU Single Core (opcjonalny)<input name="cpu_single" inputmode="decimal" placeholder="Brak pomiaru — zostaw puste"></label><label>Jednostka CPU Single Core<select name="cpu_single_unit"><option selected>pts</option><option>cb</option><option>fps</option><option>CB-CPU</option><option>CB-GFX</option></select></label>
+<label>CPU Multi Core (opcjonalny)<input name="cpu_multi" inputmode="decimal" placeholder="Brak pomiaru — zostaw puste"></label><label>Jednostka CPU Multi Core<select name="cpu_multi_unit"><option selected>pts</option><option>cb</option><option>fps</option><option>CB-CPU</option><option>CB-GFX</option></select></label>
+<label>GPU (opcjonalny)<input name="gpu_score" inputmode="decimal" placeholder="Brak pomiaru — zostaw puste"></label><label>Jednostka GPU<select name="gpu_score_unit"><option selected>pts</option><option>cb</option><option>fps</option><option>CB-CPU</option><option>CB-GFX</option></select></label>
+<label>OpenGL (opcjonalny)<input name="opengl" inputmode="decimal" placeholder="Brak pomiaru — zostaw puste"></label><label>Jednostka OpenGL<select name="opengl_unit"><option>pts</option><option>cb</option><option selected>fps</option><option>CB-CPU</option><option>CB-GFX</option></select></label>
+<label>Shading (CINEMA 4D) (opcjonalny)<input name="shading" inputmode="decimal" placeholder="Brak pomiaru — zostaw puste"></label><label>Jednostka Shading (CINEMA 4D)<select name="shading_unit"><option>pts</option><option>cb</option><option>fps</option><option>CB-CPU</option><option selected>CB-GFX</option></select></label>
+<label>OpenGL Software Lighting (opcjonalny)<input name="opengl_software" inputmode="decimal" placeholder="Brak pomiaru — zostaw puste"></label><label>Jednostka OpenGL Software Lighting<select name="opengl_software_unit"><option>pts</option><option>cb</option><option>fps</option><option>CB-CPU</option><option selected>CB-GFX</option></select></label>
+<label>OpenGL Hardware Lighting (opcjonalny)<input name="opengl_hardware" inputmode="decimal" placeholder="Brak pomiaru — zostaw puste"></label><label>Jednostka OpenGL Hardware Lighting<select name="opengl_hardware_unit"><option>pts</option><option>cb</option><option>fps</option><option>CB-CPU</option><option selected>CB-GFX</option></select></label>
+<label>OpenGL Standard (opcjonalny)<input name="opengl_standard" inputmode="decimal" placeholder="Brak pomiaru — zostaw puste"></label><label>Jednostka OpenGL Standard<select name="opengl_standard_unit"><option>pts</option><option>cb</option><option>fps</option><option>CB-CPU</option><option selected>CB-GFX</option></select></label>
 <label>Procesor<input name="cpu" required></label>
 <label class="gpu-choice"><span><input id="include-gpu" type="checkbox"> Dodaj dane GPU (opcjonalnie)</span></label>
 <label id="manual-gpu" hidden>Karta graficzna (opcjonalna)<input name="gpu" disabled placeholder="Model GPU, jeśli jest znany"></label>
@@ -35,10 +40,16 @@
 </div><button>Zapisz wynik →</button></form></details>
 </section>
 <section class="panel"><div class="section-head"><div><span class="eyebrow">02 / TWOJE ARCHIWUM</span><h2>Wyniki <span id="count" class="count">0</span></h2></div><a class="button secondary" href="/api/database">Pobierz bazę SQLite ↓</a></div>
-<p class="notice">Porównuj tylko tę samą wersję, tryb testu i jednostkę. Starsze testy OpenGL i Shading są zapisane oddzielnie, z oryginalnymi jednostkami CB-CPU i CB-GFX.</p>
-<form id="filters" class="filters"><label>Szukaj sprzętu<input name="q" placeholder="Procesor, GPU, notatki…"></label><label>Wersja<input name="edition" list="editions" placeholder="Wszystkie"></label><label>Tryb<select name="test"><option value="">Wszystkie</option><option>CPU Multi Core</option><option>CPU Single Core</option><option>GPU</option></select></label><label>Jednostka<select name="unit"><option value="">Wszystkie</option><option>pts</option><option>cb</option><option>fps</option></select></label><button>Filtruj</button></form>
-<div class="table-wrap"><table><thead><tr><th>Wersja / tryb</th><th>Wynik</th><th>Sprzęt</th><th>System / wersja / data</th><th>Plik źródłowy / notatki</th><th>Akcje</th></tr></thead><tbody id="results"></tbody></table></div>
-<div class="toolbar"><a id="export" href="/api/export.csv">Eksport widocznych wyników CSV ↓</a><label class="file-button">Import CSV<input id="csv-file" type="file" accept=".csv"></label><a href="/api/template.csv">Pobierz szablon CSV</a></div>
+<p class="notice">Porównuj tylko tę samą wersję, tryb testu i jednostkę. Single core, multi core, GPU i starsze testy mają osobne kolumny w jednym rekordzie raportu.</p>
+<form id="filters" class="filters">
+<label>Szukaj sprzętu lub pliku<input name="q" placeholder="Procesor, GPU, nazwa pliku…"></label>
+<label>Wersja<input name="edition" list="editions" placeholder="Wszystkie"></label>
+<label>Widok<select name="group_by"><option value="hardware">Średnie CPU + GPU</option><option value="cpu">Średnie według CPU</option><option value="gpu">Średnie według GPU</option><option value="none">Oryginalne raporty</option></select></label>
+<label>Sortowanie<select name="sort"><option value="cpu">CPU</option><option value="gpu">GPU</option><option value="edition">Wersja Cinebench</option><option value="measured_at">Data pomiaru</option></select></label>
+<label>Kierunek<select name="direction"><option value="asc">Rosnąco</option><option value="desc">Malejąco</option></select></label><button>Filtruj</button></form>
+<p class="notice">Średnie łączą sprzęt o tej samej nazwie (bez rozróżniania wielkości liter i nadmiarowych spacji), edycji, pełnej wersji Cinebench i jednostkach. CPU: średnie testów CPU. GPU: średnie testów graficznych. CPU + GPU: średnie całej konfiguracji. Brak pomiaru nie jest zerem; n oznacza liczbę pomiarów danej średniej.</p>
+<div class="table-wrap"><table><thead><tr id="table-head"><th><button id="sort-cpu" class="sort-header" type="button">CPU ↕</button></th><th><button id="sort-gpu" class="sort-header" type="button">GPU ↕</button></th><th>Wersja Cinebench</th><th id="system-head">System</th><th>Plik / liczba raportów</th><th>Akcje</th></tr></thead><tbody id="results"></tbody></table></div>
+<div class="toolbar"><a id="export" href="/api/export.csv">Eksport widoku CSV ↓</a><label class="file-button">Import CSV<input id="csv-file" type="file" accept=".csv"></label><a href="/api/template.csv">Pobierz szablon CSV</a></div>
 </section>
 <footer>Dane pozostają w Twojej bazie SQLite. Bez konta i bez usług zewnętrznych.</footer>
 </main><datalist id="editions"><option value="2003"><option value="R9.5"><option value="R10"><option value="R11.5"><option value="R15"><option value="R20"><option value="R23"><option value="2024"><option value="2026"></datalist>

@@ -12,7 +12,7 @@ MODES = {
 }
 
 
-def parse_report(body):
+def parse_measurements(body):
     try:
         text = body.decode('utf-8-sig')
     except UnicodeError:
@@ -39,7 +39,7 @@ def parse_report(body):
         for item in data:
             if not isinstance(item, dict):
                 raise ValueError('Nieprawidłowy obiekt wyniku JSON.')
-            if 'score' in item and 'test' in item:
+            if ('score' in item and 'test' in item) or any(key in item for key in ('cpu_single','cpu_multi','gpu_score','opengl','shading','opengl_software','opengl_hardware','opengl_standard')):
                 rows.append(item)
             else:
                 for key, mode in MODES.items():
@@ -56,6 +56,9 @@ def parse_report(body):
         raise ValueError('Nie rozpoznano wyników. Ten format wymaga adaptera opartego na przykładowym pliku; niczego nie zapisano.')
     output = []
     for item in rows:
+        if 'test' not in item:
+            output.append(dict(item) | operating_system(item.get('os','')))
+            continue
         try:
             score = float(str(item['score']).replace(',', '.'))
         except (ValueError, KeyError, TypeError):
@@ -67,3 +70,12 @@ def parse_report(body):
             parsed['edition'] = cinebench_edition(parsed['benchmark_version'])
         output.append(parsed)
     return output
+
+
+def parse_report(body):
+    from records import combine_measurements
+    rows = combine_measurements(parse_measurements(body))
+    for row in rows:
+        if not row.get('edition') and row.get('benchmark_version'):
+            row['edition'] = cinebench_edition(row['benchmark_version'])
+    return rows

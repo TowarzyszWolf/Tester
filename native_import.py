@@ -100,4 +100,4 @@ def native_report(text):
             score = number(match[1], mode)
             if score:
                 rows.append(common | dict(test=mode, score=score, unit=unit, notes=f'MHz (z pliku): {mhz}'))
-    return [row | operating_system(row.get('os', '')) for row in rows]
+    return [row | operating_system(row.get('os', '')) for row in (rows or [common])]

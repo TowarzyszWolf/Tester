@@ -1,177 +1,152 @@
-"""Local Cinebench results manager. Python 3.12+, no external dependencies."""
+"""Local Cinebench report database, Python 3.12+, standard library only."""
 import argparse
 import csv
 import io
 import json
-import math
 import sqlite3
 from contextlib import contextmanager
-from datetime import date
-from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 from importers import parse_report
-from metadata import cinebench_edition, operating_system
+from records import FIELDS, META, METRICS, BY_TEST, UNITS, validate, combine_measurements, aggregate, normalized
 
 ROOT = Path(__file__).resolve().parent
-OLD_FIELDS = ('edition', 'test', 'score', 'unit', 'cpu', 'gpu', 'threads', 'os', 'measured_at', 'notes')
-FIELDS = OLD_FIELDS + ('cores', 'clock_mhz', 'benchmark_version', 'system_name', 'architecture', 'source_file', 'os_name', 'os_version', 'os_build')
-TESTS = ('CPU Single Core', 'CPU Multi Core', 'GPU', 'OpenGL', 'Shading (CINEMA 4D)', 'OpenGL Software Lighting', 'OpenGL Hardware Lighting', 'OpenGL Standard')
-UNITS = ('pts', 'cb', 'fps', 'CB-CPU', 'CB-GFX')
 MAX_BODY = 2 * 1024 * 1024
+TESTS = tuple(BY_TEST)
+OLD_FIELDS = ('edition','test','score','unit','cpu','gpu','threads','os','measured_at','notes')
 
 
-def validate(raw):
-    if not isinstance(raw, dict):
-        raise ValueError('Wynik musi być obiektem.')
-    result = {}
-    for key in FIELDS:
-        value = raw.get(key, '')
-        if value is None:
-            value = ''
-        result[key] = str(value).strip()
-        if len(result[key]) > (4000 if key == 'notes' else 255):
-            raise ValueError(f'Pole {key} jest za długie.')
-    detected = cinebench_edition(result['benchmark_version'])
-    if not result['edition'] and detected:
-        result['edition'] = detected
-    entered = cinebench_edition(result['edition'])
-    if detected and entered and detected != entered:
-        raise ValueError('Edycja Cinebench nie zgadza się z pełną wersją programu.')
-    if entered:
-        if not result['benchmark_version'] and result['edition'].upper().removeprefix('R') != entered.upper().removeprefix('R'):
-            result['benchmark_version'] = result['edition']
-        result['edition'] = entered
-    if result['os']:
-        result.update(operating_system(result['os']))
-    if not result['edition'] or not result['cpu']:
-        raise ValueError('Podaj wersję Cinebench i procesor.')
-    if result['test'] not in TESTS or result['unit'] not in UNITS:
-        raise ValueError('Nieprawidłowy tryb testu lub jednostka.')
-    try:
-        result['score'] = float(result['score'].replace(',', '.'))
-    except ValueError:
-        raise ValueError('Wynik musi być liczbą.') from None
-    if not math.isfinite(result['score']) or result['score'] <= 0:
-        raise ValueError('Wynik musi być skończoną liczbą większą od zera.')
-    try:
-        result['threads'] = int(result['threads']) if result['threads'] else None
-        if result['threads'] is not None and not 1 <= result['threads'] <= 65536:
-            raise ValueError
-    except ValueError:
-        raise ValueError('Liczba wątków musi być liczbą całkowitą od 1 do 65536.') from None
-    try:
-        result['cores'] = int(result['cores']) if result['cores'] else None
-        if result['cores'] is not None and not 1 <= result['cores'] <= 65536:
-            raise ValueError
-        result['clock_mhz'] = float(result['clock_mhz']) if result['clock_mhz'] else None
-        if result['clock_mhz'] is not None and (not math.isfinite(result['clock_mhz']) or result['clock_mhz'] <= 0):
-            raise ValueError
-    except ValueError:
-        raise ValueError('Nieprawidłowa liczba rdzeni lub częstotliwość MHz.') from None
-    try:
-        if result['measured_at']:
-            date.fromisoformat(result['measured_at'])
-    except ValueError:
-        raise ValueError('Podaj datę pomiaru w formacie RRRR-MM-DD.') from None
-    return result
+def merge_legacy(rows):
+    groups, active = [], {}
+    for old in rows:
+        if not old.get('source_file'):
+            groups.append([old])
+            continue
+        key = tuple(str(old.get(k) or '') for k in META if k!='notes') + (str(old.get('created_at') or '')[:19],)
+        current = active.get(key)
+        if current is None or any(r['test']==old['test'] for r in current):
+            current = []
+            active[key] = current
+            groups.append(current)
+        current.append(old)
+    return [(group[0]['id'], group[0].get('created_at'), validate(combine_measurements(group)[0])) for group in groups]
 
 
 class Store:
-    def __init__(self, path):
-        self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+    def __init__(self,path):
+        self.path=Path(path)
+        self.path.parent.mkdir(parents=True,exist_ok=True)
+        self.backup_path=None
         with self.connect() as conn:
-            old_columns = {row['name'] for row in conn.execute('PRAGMA table_info(results)')}
-            migrate = bool(old_columns) and 'source_file' not in old_columns
+            columns={row['name'] for row in conn.execute('PRAGMA table_info(results)')}
+            migrate='test' in columns
+            if migrate:
+                # Snapshot before touching the original schema or measurements.
+                backup=self.path.with_name(self.path.name+'.before-v4.sqlite3')
+                counter=1
+                while backup.exists():
+                    backup=self.path.with_name(self.path.name+f'.before-v4-{counter}.sqlite3')
+                    counter+=1
+                with sqlite3.connect(backup) as destination:
+                    conn.backup(destination)
+                self.backup_path=backup
+                legacy=[dict(r) for r in conn.execute('SELECT * FROM results ORDER BY id')]
+                combined=merge_legacy(legacy)
             conn.execute('BEGIN')
             if migrate:
                 conn.execute('ALTER TABLE results RENAME TO results_legacy')
-            statements = (ROOT / 'schema.sql').read_text().split(';')
-            for statement in statements:
+            for statement in (ROOT/'schema.sql').read_text().split(';'):
                 if statement.strip():
                     conn.execute(statement)
             if migrate:
-                shared = ','.join(('id',) + OLD_FIELDS + ('created_at',))
-                conn.execute(f'INSERT INTO results ({shared}) SELECT {shared} FROM results_legacy')
+                columns=('id','created_at')+FIELDS
+                sql=f"INSERT INTO results ({','.join(columns)}) VALUES ({','.join('?' for _ in columns)})"
+                for old_id,created,row in combined:
+                    conn.execute(sql,[old_id,created or '']+[row[key] for key in FIELDS])
                 conn.execute('DROP TABLE results_legacy')
-                conn.execute('CREATE INDEX IF NOT EXISTS idx_results_group ON results(edition, test, unit)')
-            columns = {row['name'] for row in conn.execute('PRAGMA table_info(results)')}
-            backfill_os = migrate or any(column not in columns for column in ('os_name', 'os_version', 'os_build'))
-            for column in ('os_name', 'os_version', 'os_build'):
-                if column not in columns:
-                    conn.execute(f"ALTER TABLE results ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
-            if backfill_os:
-                for row in conn.execute('SELECT id, os FROM results').fetchall():
-                    detected_os = operating_system(row['os'])
-                    conn.execute('UPDATE results SET os_name=?, os_version=?, os_build=? WHERE id=?',
-                                 (*detected_os.values(), row['id']))
-            conn.execute('PRAGMA user_version = 3')
+            conn.execute('PRAGMA user_version = 4')
 
     @contextmanager
     def connect(self):
-        conn = sqlite3.connect(self.path, timeout=10)
-        conn.row_factory = sqlite3.Row
+        conn=sqlite3.connect(self.path,timeout=10)
+        conn.row_factory=sqlite3.Row
         try:
             with conn:
                 yield conn
         finally:
             conn.close()
 
-    def add(self, rows):
-        validated = [validate(row) for row in rows]
-        sql = f"INSERT INTO results ({','.join(FIELDS)}) VALUES ({','.join('?' for _ in FIELDS)})"
+    def add(self,rows):
+        validated=[validate(row) for row in rows]
+        sql=f"INSERT INTO results ({','.join(FIELDS)}) VALUES ({','.join('?' for _ in FIELDS)})"
         with self.connect() as conn:
             for row in validated:
-                conn.execute(sql, [row[key] for key in FIELDS])
+                conn.execute(sql,[row[key] for key in FIELDS])
         return len(validated)
 
-    def list(self, filters):
-        clauses, values = [], []
-        for key in ('edition', 'test', 'unit'):
-            if filters.get(key):
-                clauses.append(f'{key} = ?')
-                values.append(filters[key])
+    def list(self,filters):
+        clauses,values=[],[]
+        if filters.get('edition'):
+            clauses.append('edition=?');values.append(filters['edition'])
+        if filters.get('test'):
+            metric=BY_TEST.get(filters['test'])
+            if not metric:
+                return []
+            clauses.append(f'{metric} IS NOT NULL')
+        if filters.get('unit'):
+            clauses.append('('+' OR '.join(key+'_unit=?' for key in METRICS)+')')
+            values.extend([filters['unit']]*len(METRICS))
         if filters.get('q'):
-            clauses.append('(instr(lower(cpu), lower(?)) > 0 OR instr(lower(gpu), lower(?)) > 0 OR instr(lower(notes), lower(?)) > 0)')
-            values.extend([filters['q']] * 3)
-        sql = 'SELECT * FROM results'
-        if clauses:
-            sql += ' WHERE ' + ' AND '.join(clauses)
-        sql += ' ORDER BY measured_at DESC, id DESC'
+            clauses.append('('+' OR '.join('instr(lower('+key+'),lower(?))>0' for key in ('cpu','gpu','notes','source_file'))+')')
+            values.extend([filters['q']]*4)
+        sql='SELECT * FROM results'+(' WHERE '+' AND '.join(clauses) if clauses else '')+' ORDER BY id'
         with self.connect() as conn:
-            return [dict(row) for row in conn.execute(sql, values)]
+            rows=[dict(row) for row in conn.execute(sql,values)]
+        if filters.get('group_by') in ('cpu','gpu','hardware'):
+            rows=aggregate(rows,filters['group_by'])
+        allowed=('cpu','gpu','edition','measured_at','id',*METRICS)
+        sort=filters.get('sort','cpu')
+        if sort not in allowed:
+            sort='cpu'
+        # Unknown values remain last in either direction.
+        known=[row for row in rows if row.get(sort) not in ('',None)]
+        missing=[row for row in rows if row.get(sort) in ('',None)]
+        def key(row):
+            value=row[sort]
+            return normalized(value) if isinstance(value,str) else value
+        return sorted(known,key=key,reverse=filters.get('direction')=='desc')+missing
 
-    def delete(self, result_id):
+    def delete(self,result_id):
         with self.connect() as conn:
-            return conn.execute('DELETE FROM results WHERE id = ?', (result_id,)).rowcount
+            return conn.execute('DELETE FROM results WHERE id=?',(result_id,)).rowcount
 
     def snapshot(self):
-        with self.connect() as source, sqlite3.connect(':memory:') as target:
+        with self.connect() as source,sqlite3.connect(':memory:') as target:
             source.backup(target)
             return target.serialize()
 
 
 def parse_csv(body):
     try:
-        content = body.decode('utf-8-sig')
-        dialect = csv.Sniffer().sniff(content[:8192], delimiters=',;\t')
-        reader = csv.DictReader(io.StringIO(content, newline=''), dialect=dialect)
-        if not reader.fieldnames or not set(OLD_FIELDS).issubset(reader.fieldnames) or not set(reader.fieldnames).issubset(FIELDS) or len(set(reader.fieldnames)) != len(reader.fieldnames):
-            raise ValueError('Nieprawidłowe kolumny CSV. Pobierz wzór pliku.')
-        rows = []
-        for index, row in enumerate(reader, 2):
-            if None in row or any(value is None for value in row.values()):
-                raise ValueError(f'Wiersz {index}: nieprawidłowa liczba kolumn.')
+        content=body.decode('utf-8-sig')
+        dialect=csv.Sniffer().sniff(content[:8192],delimiters=',;\t')
+        reader=csv.DictReader(io.StringIO(content,newline=''),dialect=dialect)
+        headers=reader.fieldnames or []
+        if len(set(headers))!=len(headers) or not {'edition','cpu'}.issubset(headers) or not set(headers).issubset(FIELDS):
+            raise ValueError('Nieprawidłowe kolumny CSV. Pobierz nowy szablon: jeden wiersz to jeden raport.')
+        rows=[]
+        for index,row in enumerate(reader,2):
             try:
+                if None in row or any(value is None for value in row.values()):
+                    raise ValueError('Nieprawidłowa liczba kolumn.')
                 rows.append(validate(row))
             except ValueError as exc:
                 raise ValueError(f'Wiersz {index}: {exc}') from None
         if not rows:
-            raise ValueError('Plik CSV nie zawiera wyników.')
+            raise ValueError('Plik CSV nie zawiera rekordów.')
         return rows
-    except (UnicodeError, csv.Error) as exc:
+    except (UnicodeError,csv.Error) as exc:
         raise ValueError('Nie można odczytać CSV. Użyj UTF-8 oraz separatora przecinek, średnik lub tabulator.') from exc
 
 
@@ -210,9 +185,16 @@ def handler_for(store):
                 rows = store.list(filters)
                 if url.path.endswith('.csv'):
                     output = io.StringIO(newline='')
-                    writer = csv.DictWriter(output, fieldnames=FIELDS, extrasaction='ignore')
+                    columns = FIELDS + (('report_count',) + tuple(key+'_count' for key in METRICS) if filters.get('group_by') in ('cpu','gpu','hardware') else ())
+                    writer = csv.DictWriter(output, fieldnames=columns, extrasaction='ignore')
                     writer.writeheader()
-                    writer.writerows(rows)
+                    for row in rows:
+                        exported = dict(row)
+                        for key in METRICS:
+                            if exported[key] is not None:
+                                exported[key] = format(exported[key], '.2f')
+                            exported[key+'_count'] = row.get('counts',{}).get(key,'')
+                        writer.writerow(exported)
                     self.reply(200, output.getvalue().encode('utf-8-sig'), 'text/csv; charset=utf-8', 'cinebench.csv')
                 else:
                     self.reply(200, rows)

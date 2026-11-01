@@ -5,6 +5,7 @@ import tempfile
 import unittest
 
 from app import Store, validate
+from records import METRICS
 from importers import parse_report
 
 FIXTURES = Path(__file__).parent / 'fixtures'
@@ -46,82 +47,90 @@ def fixture(prefix):
 
 
 class NativeTests(unittest.TestCase):
-    def test_all_25_reports_exact_scores_and_database_roundtrip(self):
-        seen, all_rows = set(), []
-        for prefix, edition, scores in CASES:
+    def test_all_25_files_are_25_records_with_62_measurements(self):
+        seen,all_rows=set(),[]
+        for prefix,edition,scores in CASES:
             with self.subTest(prefix=prefix):
-                path = fixture(prefix)
-                seen.add(path)
-                rows = parse_report(path.read_bytes())
-                self.assertEqual([r['score'] for r in rows], scores)
-                for row in rows:
-                    self.assertEqual(row['edition'], edition)
-                    row = validate(row | {'source_file': path.name})
-                    self.assertEqual(row['measured_at'], '')
-                    all_rows.append(row)
-        self.assertEqual(seen, set(FIXTURES.glob('*.txt')))
-        self.assertEqual(len(all_rows), 62)
+                path=fixture(prefix);seen.add(path)
+                records=parse_report(path.read_bytes())
+                self.assertEqual(len(records),1)
+                row=validate(records[0] | {'source_file':path.name})
+                self.assertEqual([row[k] for k in METRICS if row[k] is not None],scores)
+                self.assertEqual(row['edition'],edition)
+                self.assertEqual(row['measured_at'],'')
+                all_rows.append(row)
+        self.assertEqual(seen,set(FIXTURES.glob('*.txt')))
         with tempfile.TemporaryDirectory() as tmp:
-            store = Store(Path(tmp) / 'native.sqlite3')
-            store.add(all_rows)
-            restored = Store(store.path).list({})
-            self.assertEqual(len(restored), 62)
-            self.assertEqual(len({r['source_file'] for r in restored}), 24)
-            self.assertEqual(len(store.list({'edition': '2024'})), 0)
+            store=Store(Path(tmp)/'native.sqlite3');self.assertEqual(store.add(all_rows),25)
+            rows=Store(store.path).list({})
+            self.assertEqual(len(rows),25)
+            self.assertEqual(sum(r[k] is not None for r in rows for k in METRICS),62)
+            self.assertEqual(len(store.list({'edition':'2024'})),1)
 
-    def test_old_shading_modes_and_units_stay_distinct(self):
-        rows = parse_report(fixture('Apple Power Mac G4-CR2003').read_bytes())
-        self.assertEqual([r['test'] for r in rows], ['CPU Single Core', 'Shading (CINEMA 4D)', 'OpenGL Software Lighting', 'OpenGL Hardware Lighting'])
-        self.assertEqual([r['unit'] for r in rows], ['CB-CPU', 'CB-GFX', 'CB-GFX', 'CB-GFX'])
-        self.assertEqual(rows[0]['clock_mhz'], 400)
-        self.assertNotIn('cores', rows[0])
+    def test_legacy_shading_is_columns_not_rows(self):
+        row=parse_report(fixture('Apple Power Mac G4-CR2003').read_bytes())[0]
+        self.assertEqual([row[k] for k in ('cpu_single','shading','opengl_software','opengl_hardware')],[42,55,142,80])
+        self.assertEqual(row['cpu_single_unit'],'CB-CPU')
+        self.assertEqual(row['shading_unit'],'CB-GFX')
+        self.assertEqual(row['clock_mhz'],400)
 
-    def test_logical_threads_and_precision(self):
-        row = parse_report(fixture('15_037_RC83328demo_4C').read_bytes())[1]
-        self.assertEqual(validate(row)['threads'], 8)
-        self.assertEqual(validate(row)['cores'], 4)
-        self.assertEqual(row['score'], 661.868123)
-        self.assertEqual(row['benchmark_version'], '15.037')
-        self.assertEqual(row['unit'], 'cb')
-        self.assertEqual(row['cpu'], 'Intel Core i7-3770 CPU')
+    def test_threads_precision_and_versions(self):
+        row=validate(parse_report(fixture('15_037_RC83328demo_4C').read_bytes())[0])
+        self.assertEqual((row['threads'],row['cores'],row['cpu_multi']),(8,4,661.868123))
+        self.assertEqual(row['benchmark_version'],'15.037')
+        self.assertEqual(row['cpu_multi_unit'],'cb')
+        self.assertEqual(row['cpu'],'Intel Core i7-3770 CPU')
 
-    def test_peak_and_arrays_are_metadata_only(self):
-        rows = parse_report(fixture('23_200_4C').read_bytes())
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]['score'], 3669.154145)
-        self.assertIn('CBCPUXPEAK=3671.255383', rows[0]['notes'])
-        self.assertNotIn('MHZ_ESTIMATE', rows[0]['notes'])
+    def test_peaks_not_extra_records(self):
+        rows=parse_report(fixture('23_200_4C').read_bytes())
+        self.assertEqual(len(rows),1)
+        self.assertEqual(rows[0]['cpu_multi'],3669.154145)
+        self.assertIn('CBCPUXPEAK=3671.255383',rows[0]['notes'])
 
-    def test_native_gpu_rendering_is_not_opengl(self):
-        text = fixture('2026_100_').read_text().replace('CBGPU=0.000000', 'CBGPU=123.45')
-        rows = parse_report(text.encode())
-        self.assertEqual(rows[-1]['test'], 'GPU')
-        self.assertEqual(rows[-1]['unit'], 'pts')
+    def test_gpu_rendering_not_opengl(self):
+        text=fixture('2026_100_').read_text().replace('CBGPU=0.000000','CBGPU=123.45')
+        row=parse_report(text.encode())[0]
+        self.assertEqual(row['gpu_score'],123.45)
+        self.assertEqual(row['gpu_score_unit'],'pts')
+        self.assertNotIn('opengl',row)
 
-    def test_mac_line_endings_and_ghz_comma(self):
-        rows = parse_report(fixture('Dell ChromeBook').read_bytes())
-        self.assertEqual(rows[0]['clock_mhz'], 1600)
-        text = fixture('Apple Power Mac G4-CR2003').read_text()
-        for ending in ('\r', '\n', '\r\n', '\r\r\n'):
-            self.assertEqual(len(parse_report(text.replace('\n', ending).encode())), 4)
-        self.assertEqual(len(parse_report(text.encode('utf-16'))), 4)
+    def test_line_endings_and_utf16(self):
+        text=fixture('Apple Power Mac G4-CR2003').read_text()
+        for ending in ('\r','\n','\r\n','\r\r\n'):
+            self.assertEqual(parse_report(text.replace('\n',ending).encode())[0]['opengl_hardware'],80)
+        self.assertEqual(parse_report(text.encode('utf-16'))[0]['cpu_single'],42)
+        self.assertEqual(parse_report(fixture('Dell ChromeBook').read_bytes())[0]['clock_mhz'],1600)
 
     def test_invalid_native_score_rejected(self):
-        body = fixture('23_200_4C').read_bytes().replace(b'CBCPUX=3669.154145', b'CBCPUX=nan')
-        with self.assertRaises(ValueError):
-            parse_report(body)
+        body=fixture('23_200_4C').read_bytes().replace(b'CBCPUX=3669.154145',b'CBCPUX=nan')
+        with self.assertRaises(ValueError):parse_report(body)
 
-    def test_old_database_migration_preserves_records(self):
+    def test_legacy_migration_backup_and_repeated_imports(self):
         with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / 'old.sqlite3'
+            path=Path(tmp)/'old.sqlite3'
             with sqlite3.connect(path) as conn:
-                conn.executescript("""
-                CREATE TABLE results(id INTEGER PRIMARY KEY, edition TEXT, test TEXT CHECK(test IN ('CPU Single Core','CPU Multi Core','GPU')), score REAL, unit TEXT CHECK(unit IN ('pts','cb','fps')), cpu TEXT, gpu TEXT, threads INTEGER, os TEXT, measured_at TEXT, notes TEXT, created_at TEXT);
-                CREATE INDEX idx_results_group ON results(edition,test,unit);
-                INSERT INTO results VALUES(77,'R23','CPU Multi Core',100,'pts','Existing CPU','',4,'Linux','2026-01-01','Keep me','timestamp');
-                """)
-            store = Store(path)
-            row = store.list({})[0]
-            self.assertEqual((row['id'], row['notes'], row['created_at']), (77, 'Keep me', 'timestamp'))
-            store.add(parse_report(fixture('Apple Power Mac G4-CR2003').read_bytes()))
-            self.assertEqual(len(Store(path).list({})), 5)
+                conn.execute('CREATE TABLE results(id INTEGER PRIMARY KEY, edition TEXT,test TEXT,score REAL,unit TEXT,cpu TEXT,gpu TEXT,source_file TEXT,benchmark_version TEXT,notes TEXT,created_at TEXT)')
+                for i,(mode,score,unit) in enumerate([('CPU Single Core',100,'pts'),('CPU Multi Core',200,'pts'),('GPU',300,'pts')]*2,1):
+                    conn.execute('INSERT INTO results VALUES(?,?,?,?,?,?,?,?,?,?,?)',(i,'R23',mode,score,unit,'CPU','GPU','same.txt','23.200',mode,'2026-01-01T01:01:01Z'))
+                conn.execute("INSERT INTO results VALUES(77,'R23','CPU Multi Core',99,'pts','Existing CPU','','','','Keep me','timestamp')")
+            store=Store(path);rows=store.list({})
+            self.assertEqual(len(rows),3)
+            reports=[r for r in rows if r['source_file']=='same.txt']
+            self.assertEqual(len(reports),2)
+            self.assertEqual([r['id'] for r in reports],[1,4])
+            self.assertEqual(reports[0]['gpu_score'],300)
+            kept=next(r for r in rows if r['id']==77)
+            self.assertEqual((kept['notes'],kept['created_at']),('Keep me','timestamp'))
+            self.assertTrue(store.backup_path.exists())
+            with sqlite3.connect(store.backup_path) as backup:
+                self.assertEqual(backup.execute('SELECT count(*) FROM results').fetchone()[0],7)
+            self.assertIsNone(Store(path).backup_path)
+
+    def test_failed_migration_leaves_original_database(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'bad.sqlite3'
+            with sqlite3.connect(path) as conn:
+                conn.executescript("CREATE TABLE results(id INTEGER PRIMARY KEY,edition TEXT,test TEXT,score REAL,unit TEXT,cpu TEXT); INSERT INTO results VALUES(1,'R23','UNKNOWN',100,'pts','CPU');")
+            with self.assertRaises(ValueError):Store(path)
+            with sqlite3.connect(path) as conn:
+                self.assertEqual(conn.execute('SELECT test FROM results').fetchone()[0],'UNKNOWN')

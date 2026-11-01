@@ -1,66 +1,45 @@
 const $ = s => document.querySelector(s);
-let pending = [];
-const localDate = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
-$('#manual-form input[type=date]').value = localDate();
-$('#include-gpu').addEventListener('change', e => {
-  $('#manual-gpu').hidden = !e.target.checked;
-  $('#manual-gpu input').disabled = !e.target.checked;
-});
-const extraTests = ['OpenGL', 'Shading (CINEMA 4D)', 'OpenGL Software Lighting', 'OpenGL Hardware Lighting', 'OpenGL Standard'];
-for (const select of document.querySelectorAll('select[name=test]')) for (const value of extraTests) select.add(new Option(value, value));
-for (const select of document.querySelectorAll('select[name=unit]')) for (const value of ['CB-CPU','CB-GFX']) select.add(new Option(value, value));
-function message(text, error=false) { $('#message').textContent=text; $('#message').className=error?'error':''; }
-async function api(path, options={}) {
-  const response=await fetch(path,{...options,headers:{'X-Cinebench-Client':'1',...options.headers}});
-  const body=await response.json(); if(!response.ok) throw new Error(body.error||'Błąd zapisu.'); return body;
+const metrics = {cpu_single:'CPU Single Core',cpu_multi:'CPU Multi Core',gpu_score:'GPU',opengl:'OpenGL',shading:'Shading (CINEMA 4D)',opengl_software:'OpenGL Software Lighting',opengl_hardware:'OpenGL Hardware Lighting',opengl_standard:'OpenGL Standard'};
+const formatScore = value => value===null || value===undefined || value==='' ? '—' : Number(value).toLocaleString('pl-PL',{minimumFractionDigits:2,maximumFractionDigits:2});
+let pending=[],selection=0;
+const d=new Date();$('#manual-form input[type=date]').value=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+$('#include-gpu').addEventListener('change',e=>{const box=$('#manual-gpu');box.hidden=!e.target.checked;box.querySelectorAll('input,select').forEach(el=>el.disabled=!e.target.checked);});
+function message(text,error=false){$('#message').textContent=text;$('#message').className=error?'error':'';}
+async function api(path,options={}){const response=await fetch(path,{...options,headers:{'X-Cinebench-Client':'1',...options.headers}});const body=await response.json();if(!response.ok)throw new Error(body.error||'Błąd operacji.');return body;}
+function node(tag,text,cls){const el=document.createElement(tag);el.textContent=text;if(cls)el.className=cls;return el;}
+function cell(row,primary,secondary,cls){const td=node('td','',cls);td.append(node('strong',primary||'—'));if(secondary)td.append(node('small',secondary));row.append(td);}
+for(const [key,label] of Object.entries(metrics)){
+  const th=node('th','');const b=node('button',label,'sort-header');b.type='button';b.addEventListener('click',()=>{const f=$('#filters');f.elements.direction.value=f.elements.sort.value===key && f.elements.direction.value==='desc'?'asc':'desc';f.elements.sort.value=key;load().catch(e=>message(e.message,true));});th.append(b);$('#table-head').insertBefore(th,$('#system-head'));
+  $('#filters select[name=sort]').add(new Option(label,key));
 }
-function node(tag, text, className) {const el=document.createElement(tag);el.textContent=text;if(className)el.className=className;return el;}
-function cell(row, primary, secondary, cls) {const td=node('td','',cls);td.append(node('strong',primary));if(secondary)td.append(node('small',secondary));row.append(td);}
-async function load() {
-  const params=new URLSearchParams(new FormData($('#filters')));
-  const rows=await api('/api/results?'+params);$('#count').textContent=rows.length;$('#export').href='/api/export.csv?'+params;
+for(const key of ['cpu','gpu'])$('#sort-'+key).addEventListener('click',()=>{const f=$('#filters');f.elements.direction.value=f.elements.sort.value===key&&f.elements.direction.value==='asc'?'desc':'asc';f.elements.sort.value=key;load().catch(e=>message(e.message,true));});
+async function load(){
+  const params=new URLSearchParams(new FormData($('#filters')));const rows=await api('/api/results?'+params);const grouped=params.get('group_by')!=='none';
+  $('#count').textContent=`${rows.length} ${grouped?'grup':'raportów'}`;$('#export').href='/api/export.csv?'+params;
   const table=$('#results');table.replaceChildren();
-  if(!rows.length){const tr=node('tr','');const td=node('td','Brak wyników. Zaimportuj plik lub dodaj pierwszy pomiar.','empty');td.colSpan=6;tr.append(td);table.append(tr);}
-  for(const r of rows){const tr=node('tr','');cell(tr,r.edition,[r.test,r.benchmark_version].filter(Boolean).join(' · '));cell(tr,Number(r.score).toLocaleString('pl-PL',{maximumFractionDigits:6}),r.unit,'score');cell(tr,r.cpu,[r.system_name,r.gpu,r.cores?`${r.cores} rdzeni`:'',r.threads?`${r.threads} wątków`:'',r.clock_mhz?`${r.clock_mhz} MHz`:'',r.architecture].filter(Boolean).join(' · '));cell(tr,[r.os_name,r.os_version,r.os_build?'build '+r.os_build:''].filter(Boolean).join(' ')||'System nieznany',[r.os,r.measured_at||'Data nieznana'].filter(Boolean).join(' · '));cell(tr,r.source_file,r.notes,'notes');const td=node('td','');const b=node('button','Usuń','delete');b.type='button';b.addEventListener('click',async()=>{if(!confirm(`Usunąć wynik ${r.edition}: ${r.score} ${r.unit}?`))return;try{await api('/api/results/'+r.id,{method:'DELETE'});await load();message('Wynik usunięty.');}catch(e){message(e.message,true);}});td.append(b);tr.append(td);table.append(tr);}
+  if(!rows.length){const tr=node('tr','');const td=node('td','Brak raportów lub pomiarów spełniających wybrane filtry.','empty');td.colSpan=14;tr.append(td);table.append(tr);}
+  for(const r of rows){
+    const tr=node('tr','');cell(tr,r.cpu,grouped&&r.group_by==='gpu'?'Średnie tylko testów graficznych':r.system_name);cell(tr,r.gpu,grouped&&r.group_by==='cpu'?'Średnie tylko testów CPU':'');cell(tr,r.edition,r.benchmark_version);
+    for(const key of Object.keys(metrics))cell(tr,formatScore(r[key]),r[key]===null?'':`${r[key+'_unit']||''}${grouped?' · n='+r.counts[key]:''}`,'score');
+    cell(tr,[r.os_name,r.os_version,r.os_build?'build '+r.os_build:''].filter(Boolean).join(' '),grouped?'Różne konfiguracje':r.os);cell(tr,grouped?`${r.report_count} raportów`:r.source_file,grouped?'Średnia arytmetyczna':r.measured_at||'Data nieznana','notes');
+    const td=node('td','');
+    if(!grouped){const b=node('button','Usuń raport','delete');b.type='button';b.addEventListener('click',async()=>{if(!confirm('Usunąć cały raport wraz ze wszystkimi wynikami?'))return;try{await api('/api/results/'+r.id,{method:'DELETE'});await load();message('Raport usunięty.');}catch(e){message(e.message,true);}});td.append(b);if(r.notes){const details=node('details','');details.append(node('summary','Szczegóły'),node('p',r.notes));td.append(details);}}
+    tr.append(td);table.append(tr);
+  }
 }
-async function busy(form, action) {const buttons=[...form.querySelectorAll('button')];buttons.forEach(b=>b.disabled=true);try{await action();}catch(e){message(e.message,true);}finally{buttons.forEach(b=>b.disabled=false);}}
-$('#filters').addEventListener('submit',e=>{e.preventDefault();load().catch(e=>message(e.message,true));});
-$('#manual-form').addEventListener('submit',e=>{e.preventDefault();busy(e.target,async()=>{await api('/api/results',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(e.target)))});await load();message('Wynik zapisany.');});});
-let selection = 0;
+async function busy(form,action){const buttons=[...form.querySelectorAll('button')];buttons.forEach(b=>b.disabled=true);try{await action();}catch(e){message(e.message,true);}finally{buttons.forEach(b=>b.disabled=false);}}
+$('#filters').addEventListener('submit',e=>{e.preventDefault();load().catch(e=>message(e.message,true));});$('#filters').querySelectorAll('select').forEach(el=>el.addEventListener('change',()=>load().catch(e=>message(e.message,true))));
+$('#manual-form').addEventListener('submit',e=>{e.preventDefault();busy(e.target,async()=>{await api('/api/results',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(e.target)))});await load();message('Zapisano jeden raport ze wszystkimi podanymi wynikami.');});});
 $('#report-file').addEventListener('change',async e=>{
-  const generation = ++selection;
-  pending=[];$('#import-form').hidden=true;
-  const files=[...e.target.files];if(!files.length)return;
-  if(files.length>100){message('Wybierz maksymalnie 100 plików jednocześnie.',true);return;}
-  $('#file-name').textContent=`Wybrano plików: ${files.length}`;
-  const rows=[], info=[];
-  for(const file of files){
-    try{
-      if(file.size>2097152)throw new Error('Limit pliku to 2 MB.');
-      const parsed=await api('/api/parse',{method:'POST',body:file});
-      rows.push(...parsed.map(row=>({...row,source_file:file.name})));
-      info.push(`${file.name}: ${parsed.length ? parsed.length+' wyników' : 'brak wykonanych pomiarów — pominięto'}`);
-    }catch(error){info.push(`${file.name}: BŁĄD — ${error.message}`);}
-    if(generation!==selection)return;
-  }
-  pending=rows;
-  const preview=$('#preview');preview.replaceChildren();
-  for(const r of pending){
-    const entry=node('div','', 'preview-entry');
-    entry.append(node('strong',`${r.edition||'Wersja do uzupełnienia'}${r.benchmark_version?' / '+r.benchmark_version:''} · ${r.test} · ${r.score} ${r.unit||'(jednostka do uzupełnienia)'}`));
-    entry.append(node('p',`${r.cpu||'Procesor do uzupełnienia'} · ${r.gpu||'GPU nie podano (opcjonalne)'}`));
-    entry.append(node('p',`System: ${r.os||'do uzupełnienia (opcjonalnie)'}${r.os_build?' · kompilacja '+r.os_build:''}`));
-    entry.append(node('small',r.source_file));preview.append(entry);
-  }
-  for(const key of ['edition','benchmark_version','os','cpu','gpu','unit']){
-    const input=$('#import-form').elements.namedItem(key);
-    const values=[...new Set(pending.map(row=>String(row[key]||'')))];
-    input.value=values.length===1?values[0]:'';
-  }
-  $('#import-form').hidden=!pending.length;
-  message(`Odczytano wyników: ${pending.length}. Sprawdź podgląd. Brak daty w pliku oznacza datę nieznaną, chyba że ją uzupełnisz.\n`+info.join('\n'));
+  const generation=++selection;pending=[];$('#import-form').hidden=true;const files=[...e.target.files];if(!files.length)return;if(files.length>100){message('Wybierz do 100 plików.',true);return;}
+  $('#file-name').textContent=`Wybrano plików: ${files.length}`;const rows=[],info=[];
+  for(const file of files){try{if(file.size>2097152)throw new Error('Limit pliku to 2 MB.');const parsed=await api('/api/parse',{method:'POST',body:file});if(parsed.length!==1)throw new Error('Plik musi zawierać jeden raport.');const row={...parsed[0],source_file:file.name};rows.push(row);const n=Object.keys(metrics).filter(k=>row[k]!==null&&row[k]!==undefined&&row[k]!=='').length;info.push(`${file.name}: 1 rekord, ${n} wykonanych testów`);}catch(error){info.push(`${file.name}: BŁĄD — ${error.message}`);}if(generation!==selection)return;}
+  pending=rows;const preview=$('#preview');preview.replaceChildren();
+  for(const r of pending){const entry=node('div','','preview-entry');entry.append(node('strong',`${r.edition||'Wersja do uzupełnienia'} / ${r.benchmark_version||'—'} · ${r.cpu||'CPU do uzupełnienia'}`));entry.append(node('p',Object.entries(metrics).filter(([key])=>r[key]!==undefined&&r[key]!==null&&r[key]!=='').map(([key,label])=>`${label}: ${formatScore(r[key])} ${r[key+'_unit']||''}`).join(' · ')||'Brak wykonanych testów — zapisany zostanie raport bez pomiarów.'));entry.append(node('p',`GPU: ${r.gpu||'nie podano (opcjonalne)'} · System: ${r.os||'nieznany'}`),node('small',r.source_file));preview.append(entry);}
+  for(const key of ['edition','benchmark_version','os','cpu','gpu']){const input=$('#import-form').elements.namedItem(key);const values=[...new Set(pending.map(row=>String(row[key]||'')))];input.value=values.length===1?values[0]:'';}
+  $('#import-form').hidden=!pending.length;message(`Przygotowano rekordów: ${pending.length}. Jeden plik = jeden rekord.\n`+info.join('\n'));
 });
 $('#cancel-import').addEventListener('click',()=>{selection++;pending=[];$('#import-form').hidden=true;$('#report-file').value='';message('Import anulowany.');});
-$('#import-form').addEventListener('submit',e=>{e.preventDefault();busy(e.target,async()=>{const defaults=Object.fromEntries(new FormData(e.target));const rows=pending.map(row=>{const merged={...defaults};for(const [k,v] of Object.entries(row))if(v!==''&&v!==null)merged[k]=v;return merged;});const result=await api('/api/import-results',{method:'POST',body:JSON.stringify(rows)});pending=[];e.target.hidden=true;$('#report-file').value='';await load();message(`Zapisano wyników: ${result.added}.`);});});
-$('#csv-file').addEventListener('change',async e=>{const file=e.target.files[0];if(!file)return;try{if(file.size>2097152)throw new Error('Limit pliku to 2 MB.');const result=await api('/api/import',{method:'POST',body:file});await load();message(`Zaimportowano wyników: ${result.added}.`);}catch(e){message(e.message,true);}finally{e.target.value='';}});
+$('#import-form').addEventListener('submit',e=>{e.preventDefault();busy(e.target,async()=>{const defaults=Object.fromEntries(new FormData(e.target));const rows=pending.map(row=>{const merged={...defaults};for(const [k,v] of Object.entries(row))if(v!==''&&v!==null)merged[k]=v;for(const key of Object.keys(metrics))if(merged[key]!==undefined&&merged[key]!==null&&merged[key]!==''&&!merged[key+'_unit'])merged[key+'_unit']=defaults.unit;delete merged.unit;return merged;});const result=await api('/api/import-results',{method:'POST',body:JSON.stringify(rows)});pending=[];e.target.hidden=true;$('#report-file').value='';await load();message(`Zapisano raportów: ${result.added}.`);});});
+$('#csv-file').addEventListener('change',async e=>{const file=e.target.files[0];if(!file)return;try{if(file.size>2097152)throw new Error('Limit pliku to 2 MB.');const result=await api('/api/import',{method:'POST',body:file});await load();message(`Zaimportowano raportów: ${result.added}.`);}catch(e){message(e.message,true);}finally{e.target.value='';}});
 load().catch(e=>message(e.message,true));
