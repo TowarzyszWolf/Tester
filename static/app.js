@@ -21,13 +21,14 @@ async function load(){
   const table=$('#results');table.replaceChildren();
   if(!rows.length){const tr=node('tr','');const td=node('td','Brak raportów lub pomiarów spełniających wybrane filtry.','empty');td.colSpan=14;tr.append(td);table.append(tr);}
   for(const r of rows){
-    const tr=node('tr','');cell(tr,r.cpu,grouped&&r.group_by==='gpu'?'Średnie tylko testów graficznych':r.system_name);cell(tr,r.gpu,grouped&&r.group_by==='cpu'?'Średnie tylko testów CPU':'');cell(tr,r.edition,r.benchmark_version);
+    const tr=node('tr','');modelCell(tr,'cpu',r.cpu,grouped&&r.group_by==='gpu'?'Średnie tylko testów graficznych':r.system_name);modelCell(tr,'gpu',r.gpu,grouped&&r.group_by==='cpu'?'Średnie tylko testów CPU':'');cell(tr,r.edition,r.benchmark_version);
     for(const key of Object.keys(metrics))cell(tr,formatScore(r[key]),r[key]===null?'':`${r[key+'_unit']||''}${grouped?' · n='+r.counts[key]:''}`,'score');
     cell(tr,[r.os_name,r.os_version,r.os_build?'build '+r.os_build:''].filter(Boolean).join(' '),grouped?'Różne konfiguracje':r.os);cell(tr,grouped?`${r.report_count} raportów`:r.source_file,grouped?'Średnia arytmetyczna':r.measured_at||'Data nieznana','notes');
     const td=node('td','');
     if(!grouped){const b=node('button','Usuń raport','delete');b.type='button';b.addEventListener('click',async()=>{if(!confirm('Usunąć cały raport wraz ze wszystkimi wynikami?'))return;try{await api('/api/results/'+r.id,{method:'DELETE'});await load();message('Raport usunięty.');}catch(e){message(e.message,true);}});td.append(b);if(r.notes){const details=node('details','');details.append(node('summary','Szczegóły'),node('p',r.notes));td.append(details);}}
     tr.append(td);table.append(tr);
   }
+  await Promise.all([loadRanking('cpu'),loadRanking('gpu'),$('#hardware-dialog').open&&activeHardware?loadHardware():Promise.resolve()]);
 }
 async function busy(form,action){const buttons=[...form.querySelectorAll('button')];buttons.forEach(b=>b.disabled=true);try{await action();}catch(e){message(e.message,true);}finally{buttons.forEach(b=>b.disabled=false);}}
 $('#filters').addEventListener('submit',e=>{e.preventDefault();load().catch(e=>message(e.message,true));});$('#filters').querySelectorAll('select').forEach(el=>el.addEventListener('change',()=>load().catch(e=>message(e.message,true))));
@@ -117,4 +118,84 @@ $('#import-form').addEventListener('submit',e=>{
   });
 });
 $('#csv-file').addEventListener('change',async e=>{const file=e.target.files[0];if(!file)return;try{if(file.size>2097152)throw new Error('Limit pliku to 2 MB.');const result=await api('/api/import',{method:'POST',body:file});await load();message(`Zaimportowano raportów: ${result.added}.`);}catch(e){message(e.message,true);}finally{e.target.value='';}});
+
+const rankingViews={cpu:{params:{},generation:0},gpu:{params:{},generation:0}};
+let activeHardware=null,hardwareGeneration=0;
+function hardwareButton(device,model){
+  const button=node('button',model,'model-link');button.type='button';button.title='Wszystkie zapisane raporty tego modelu ze wszystkich wersji Cinebench';
+  button.addEventListener('click',()=>openHardware(device,model));return button;
+}
+function modelCell(row,device,model,secondary){const td=node('td','');if(model)td.append(hardwareButton(device,model));else td.append(node('strong','—'));if(secondary)td.append(node('small',secondary));row.append(td);}
+for(const device of ['cpu','gpu']){
+  const form=$('#ranking-'+device+'-filters');
+  for(const [key,title] of [['edition','Edycja Cinebench'],['metric','Rodzaj testu'],['benchmark_version','Pełna wersja'],['unit','Jednostka']]){
+    const label=node('label',title);const select=document.createElement('select');select.name=key;label.append(select);form.append(label);
+    select.addEventListener('change',()=>{
+      const state=rankingViews[device];state.params={...state.params,[key]:select.value};
+      if(key==='edition'){delete state.params.metric;delete state.params.benchmark_version;delete state.params.unit;}
+      if(key==='metric'){delete state.params.benchmark_version;delete state.params.unit;}
+      if(key==='benchmark_version')delete state.params.unit;
+      loadRanking(device);
+    });
+  }
+  form.addEventListener('submit',e=>e.preventDefault());
+}
+function rankingOptions(select,values,selected,label){
+  select.replaceChildren();
+  if(!values.length)select.add(new Option('Brak pomiarów',''));
+  for(const value of values)select.add(new Option(label?label(value):(value||'Nie podano'),value));
+  if(values.length && !values.includes(selected))select.add(new Option((label?label(selected):selected||'Nie podano')+' — brak wyników',selected));
+  select.value=selected;select.disabled=!values.length;
+}
+async function loadRanking(device){
+  const state=rankingViews[device],generation=++state.generation;
+  const status=$('#ranking-'+device+'-status');
+  try{
+    const data=await api('/api/rankings?'+new URLSearchParams({device,...state.params}));if(generation!==state.generation)return;
+    state.params=data.editions.length?{...data.selected}:{};
+    const form=$('#ranking-'+device+'-filters');
+    rankingOptions(form.elements.edition,data.editions,data.selected.edition);
+    rankingOptions(form.elements.metric,data.metrics,data.selected.metric,key=>metrics[key]||key);
+    rankingOptions(form.elements.benchmark_version,data.benchmark_versions,data.selected.benchmark_version);
+    rankingOptions(form.elements.unit,data.units,data.selected.unit);
+    $('#ranking-'+device+'-count').textContent=data.rows.length+' modeli';
+    status.textContent=data.rows.length?'Średnia z dostępnych pomiarów. Kliknij model, aby zobaczyć historię.':'Brak pomiarów w tym rankingu. Zaimportuj odpowiedni raport lub wybierz inną wersję/test.';
+    const body=$('#ranking-'+device+'-rows');body.replaceChildren();
+    for(const row of data.rows){const tr=node('tr','');cell(tr,String(row.rank));const model=node('td','');model.append(hardwareButton(device,row.model));tr.append(model);cell(tr,formatScore(row.score),data.selected.unit,'score');cell(tr,String(row.count));body.append(tr);}
+  }catch(error){if(generation===state.generation){status.textContent='Nie można odczytać rankingu: '+error.message;$('#ranking-'+device+'-rows').replaceChildren();}}
+}
+function openHardware(device,model){
+  activeHardware={device,model};if(!$('#hardware-dialog').open)$('#hardware-dialog').showModal();loadHardware();
+}
+$('#close-hardware').addEventListener('click',()=>$('#hardware-dialog').close());
+$('#hardware-dialog').addEventListener('close',()=>{activeHardware=null;hardwareGeneration++;});
+async function loadHardware(){
+  if(!activeHardware)return;
+  const generation=++hardwareGeneration;const requested={...activeHardware};
+  $('#hardware-title').textContent=requested.model;$('#hardware-kind').textContent=requested.device.toUpperCase()+' / WSZYSTKIE WERSJE CINEBENCH';
+  $('#hardware-status').textContent='Wczytywanie zapisanych raportów…';$('#hardware-content').replaceChildren();
+  try{
+    const data=await api('/api/hardware?'+new URLSearchParams(requested));if(generation!==hardwareGeneration)return;
+    $('#hardware-title').textContent=data.model;$('#hardware-status').textContent=`Raporty: ${data.record_count}. Edycje: ${data.editions.join(', ')||'brak'}. Historia obejmuje wszystkie zapisane wersje, niezależnie od filtrów rankingu i archiwum.`;
+    const content=$('#hardware-content');
+    if(!data.reports.length){content.append(node('p','Nie ma już raportów tego modelu w bazie.'));return;}
+    for(const edition of data.editions){
+      const section=document.createElement('section');section.append(node('h3','Cinebench '+edition));
+      const summaries=data.summaries.filter(r=>r.edition===edition);
+      for(const summary of summaries)section.append(node('p',`${summary.benchmark_version||'Pełna wersja nieznana'} · ${metrics[summary.metric]}: średnio ${formatScore(summary.score)} ${summary.unit} · n=${summary.count}`));
+      const wrap=node('div','','table-wrap'),table=document.createElement('table'),head=document.createElement('thead'),header=document.createElement('tr');
+      for(const label of ['Pełna wersja',...Object.values(metrics),'CPU','GPU','System / data','Plik źródłowy'])header.append(node('th',label));
+      head.append(header);table.append(head);const body=document.createElement('tbody');
+      for(const report of data.reports.filter(r=>r.edition===edition)){
+        const tr=node('tr','');cell(tr,report.benchmark_version);
+        for(const key of Object.keys(metrics))cell(tr,formatScore(report[key]),report[key]===null?'':report[key+'_unit'],'score');
+        cell(tr,report.cpu);cell(tr,report.gpu);cell(tr,report.os,[report.measured_at||'Data nieznana',report.system_name].filter(Boolean).join(' · '));
+        const source=node('td','','notes');source.append(node('strong',report.source_file||'Raport ręczny'));
+        if(report.notes){const details=node('details','');details.append(node('summary','Szczegóły'),node('p',report.notes));source.append(details);}tr.append(source);body.append(tr);
+      }
+      table.append(body);wrap.append(table);section.append(wrap);content.append(section);
+    }
+  }catch(error){if(generation===hardwareGeneration)$('#hardware-status').textContent='Nie można odczytać historii: '+error.message;}
+}
+
 load().catch(e=>message(e.message,true));

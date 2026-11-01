@@ -12,6 +12,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 from importers import parse_report
 from records import FIELDS, META, METRICS, BY_TEST, UNITS, validate, combine_measurements, aggregate, normalized
+from rankings import ranking, hardware_history
 
 ROOT = Path(__file__).resolve().parent
 MAX_BODY = 2 * 1024 * 1024
@@ -241,6 +242,14 @@ def handler_for(store):
                 self.reply(200, store.snapshot(), 'application/vnd.sqlite3', 'cinebench.sqlite3')
             elif url.path == '/api/status':
                 self.reply(200, store.status())
+            elif url.path in ('/api/rankings','/api/hardware'):
+                filters={key:value[0] for key,value in parse_qs(url.query,keep_blank_values=True).items()}
+                try:
+                    reports=store.list({})
+                    data=ranking(reports,filters) if url.path=='/api/rankings' else hardware_history(reports,filters.get('device','cpu'),filters.get('model',''))
+                    self.reply(200,data)
+                except ValueError as exc:
+                    self.reply(400,{'error':str(exc)})
             elif url.path == '/api/template.csv':
                 self.reply(200, (','.join(FIELDS) + '\r\n').encode(), 'text/csv; charset=utf-8', 'szablon.csv')
             else:

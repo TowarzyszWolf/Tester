@@ -41,7 +41,13 @@
 <label>Data pomiaru<input name="measured_at" type="date" required></label><label>Notatki<input name="notes" placeholder="Taktowanie, chłodzenie, ustawienia…"></label>
 </div><button>Zapisz wynik →</button></form></details>
 </section>
-<section class="panel"><div class="section-head"><div><span class="eyebrow">02 / TWOJE ARCHIWUM</span><h2>Wyniki <span id="count" class="count">0</span></h2></div><a class="button secondary" href="/api/database">Pobierz bazę SQLite ↓</a></div>
+<section class="panel" id="rankings"><div class="section-head"><div><span class="eyebrow">02 / RANKINGI WYDAJNOŚCI</span><h2>Rankingi CPU i GPU</h2></div><span class="tag">Aktualizowane po każdym zapisie</span></div>
+<p>Wybierz wersję Cinebench i rodzaj testu. Modele są uporządkowane według średniej wyniku, od najwyższej. Kliknij model, aby zobaczyć jego raporty ze wszystkich wersji.</p>
+<div class="rank-grid"><article class="rank-card" id="ranking-cpu"><h3>Ranking CPU <span class="count" id="ranking-cpu-count">0 modeli</span></h3><form id="ranking-cpu-filters" class="rank-filters"></form><p id="ranking-cpu-status" role="status"></p><div class="table-wrap"><table><thead><tr><th>Miejsce</th><th>Procesor</th><th>Średni wynik</th><th>Pomiary</th></tr></thead><tbody id="ranking-cpu-rows"></tbody></table></div></article>
+<article class="rank-card" id="ranking-gpu"><h3>Ranking GPU <span class="count" id="ranking-gpu-count">0 modeli</span></h3><form id="ranking-gpu-filters" class="rank-filters"></form><p id="ranking-gpu-status" role="status"></p><div class="table-wrap"><table><thead><tr><th>Miejsce</th><th>Karta graficzna</th><th>Średni wynik</th><th>Pomiary</th></tr></thead><tbody id="ranking-gpu-rows"></tbody></table></div></article></div>
+<p class="notice">Każdy ranking obejmuje jedną edycję, pełną wersję programu, rodzaj testu i jednostkę. Brak pomiaru nie jest zerem. Raport bez modelu GPU pozostaje w archiwum, ale nie trafia do rankingu GPU. Starsze testy graficzne wybierzesz osobno.</p>
+</section>
+<section class="panel"><div class="section-head"><div><span class="eyebrow">03 / TWOJE ARCHIWUM</span><h2>Wyniki <span id="count" class="count">0</span></h2></div><a class="button secondary" href="/api/database">Pobierz bazę SQLite ↓</a></div>
 <p class="notice">Porównuj tylko tę samą wersję, tryb testu i jednostkę. Single core, multi core, GPU i starsze testy mają osobne kolumny w jednym rekordzie raportu.</p>
 <form id="filters" class="filters">
 <label>Szukaj sprzętu lub pliku<input name="q" placeholder="Procesor, GPU, nazwa pliku…"></label>
@@ -54,5 +60,5 @@
 <div class="toolbar"><a id="export" href="/api/export.csv">Eksport widoku CSV ↓</a><label class="file-button">Import CSV<input id="csv-file" type="file" accept=".csv"></label><a href="/api/template.csv">Pobierz szablon CSV</a></div>
 </section>
 <footer>Dane pozostają w Twojej bazie SQLite. Bez konta i bez usług zewnętrznych.</footer>
-</main><datalist id="editions"><option value="2003"><option value="R9.5"><option value="R10"><option value="R11.5"><option value="R15"><option value="R20"><option value="R23"><option value="2024"><option value="2026"></datalist>
+</main><dialog id="hardware-dialog" aria-labelledby="hardware-title"><div class="section-head"><div><span class="eyebrow" id="hardware-kind">HISTORIA SPRZĘTU</span><h2 id="hardware-title">Wyniki modelu</h2></div><button id="close-hardware" type="button" class="secondary">Zamknij</button></div><p id="hardware-status" role="status"></p><div id="hardware-content"></div></dialog><datalist id="editions"><option value="2003"><option value="R9.5"><option value="R10"><option value="R11.5"><option value="R15"><option value="R20"><option value="R23"><option value="2024"><option value="2026"></datalist>
 </body></html>

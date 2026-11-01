@@ -4,7 +4,7 @@ Lokalna aplikacja po polsku, Python 3.12+, SQLite, bez dodatkowych bibliotek. Je
 
 ## Pobieranie i start
 
-[Pobierz program v5 — start z pustą bazą](https://github.com/TowarzyszWolf/Tester/raw/refs/heads/main/downloads/cinebase-v5.zip). Rozpakuj do nowego folderu. W katalogu programu uruchom:
+[Pobierz program v6 — start z pustą bazą](https://github.com/TowarzyszWolf/Tester/raw/refs/heads/main/downloads/cinebase-v6.zip). Rozpakuj do nowego folderu. W katalogu programu uruchom:
 
 ```sh
 python app.py
@@ -16,11 +16,11 @@ Osobno: [baza SQLite](downloads/cinebase-wyniki.sqlite3) i [eksport SQL](downloa
 
 ## Pierwszy start bez bazy
 
-Paczka v5 nie zawiera pliku bazy. Przy starcie program sam tworzy katalog `data`, plik `cinebench.sqlite3`, tabele i indeksy. Nie trzeba uruchamiać SQL ani instalować SQLite osobno. Strona pokaże pustą bazę i przycisk wyboru pierwszych raportów. Tak samo działa nowa ścieżka podana przez `--db`, również z brakującymi katalogami. Ponowny start zachowuje zapisane rekordy.
+Paczka v6 nie zawiera pliku bazy. Przy starcie program sam tworzy katalog `data`, plik `cinebench.sqlite3`, tabele i indeksy. Nie trzeba uruchamiać SQL ani instalować SQLite osobno. Strona pokaże pustą bazę i przycisk wyboru pierwszych raportów. Tak samo działa nowa ścieżka podana przez `--db`, również z brakującymi katalogami. Ponowny start zachowuje zapisane rekordy.
 
 Plik bazy o rozmiarze zero jest inicjalizowany. Uszkodzona istniejąca baza nie jest zastępowana nową — program kończy się z czytelnym błędem, zachowując plik. Gdy chcesz rozpocząć oddzielną bazę, wskaż nową nazwę przez `--db`.
 
-Przykładowa baza 25 raportów / 62 pomiarów jest dostępna osobno w `downloads/cinebase-wyniki.sqlite3`. Można ją uruchomić poleceniem `python app.py --db downloads/cinebase-wyniki.sqlite3` po pobraniu całego repozytorium. Standardowa paczka v5 zaczyna bez przykładowych danych.
+Przykładowa baza 25 raportów / 62 pomiarów jest dostępna osobno w `downloads/cinebase-wyniki.sqlite3`. Można ją uruchomić poleceniem `python app.py --db downloads/cinebase-wyniki.sqlite3` po pobraniu całego repozytorium. Standardowa paczka v6 zaczyna bez przykładowych danych.
 
 ## Raporty i import
 
@@ -39,6 +39,20 @@ Importer sprawdzono na 25 rzeczywistych raportach, obejmujących 62 wykonane pom
 Tekst UTF-8 / UTF-16 z BOM, końce linii Windows/Unix/klasyczny Mac OS. Limit 2 MB na pojedynczy plik. Łączny rozmiar wielu plików może być większy: strona dzieli zapis na partie do 25 raportów i około 500 KB, zamiast wysyłać wszystko jednym żądaniem. Nieznane i błędne pliki są opisane w podsumowaniu i nie są zapisywane. Poprawne raporty są zapisywane także wtedy, gdy inne mają błędy. Błędy odczytu i zapisu są przypisane do nazw plików. Po zapisie pozostają w podglądzie tylko błędne lub jeszcze niezapisane raporty: uzupełnij brakujące dane i ponów zapis. Ponowienie po utracie odpowiedzi w tej samej sesji strony nie dubluje już zapisanych raportów (identyfikatory potwierdzeń w tabeli import_receipts). Nie odświeżaj strony przed wznowieniem przerwanego importu, jeśli chcesz zachować jego identyfikatory. Ponowne wybranie tych samych plików rozpoczyna nowy import i może utworzyć kolejne rekordy; nie ma automatycznego usuwania duplikatów treści.
 
 Obsługiwane są również uproszczone wiersze `CPU (Multi Core): 12345 pts` i JSON. Jeden plik JSON musi opisywać jedną konfigurację, bez powtórzonego rodzaju pomiaru. Przykłady i rzeczywiste próbki: `examples` i `tests/fixtures`.
+
+## Rankingi CPU i GPU oraz historia modelu
+
+Dwa niezależne panele pokazują rankingi procesorów i kart graficznych. W każdym wybierz edycję Cinebench, rodzaj testu, pełną wersję programu i jednostkę. Domyślnie wybierana jest najnowsza dostępna edycja oraz pełna wersja z pomiarem danego rodzaju. CPU domyślnie pokazuje Multi Core; GPU pokazuje test GPU, a gdy go nie ma — dostępny starszy test graficzny, np. OpenGL. Testy Single Core, Multi Core, renderowania GPU i historyczne testy graficzne mają osobne rankingi.
+
+Nowy raport automatycznie zasila rankingi odpowiadające jego pomiarom. Rankingi są wyliczane z bazy na bieżąco, więc zapis z formularza, pliku lub CSV oraz usunięcie raportu od razu aktualizują zestawienia. Nie trzeba osobno przypisywać pomiarów do modeli ani odbudowywać rankingu. Jeden plik nadal jest jednym rekordem w bazie, nawet jeśli zasila więcej niż jeden ranking.
+
+Modele są porządkowane malejąco według średniej arytmetycznej dostępnych wyników. Nazwy są porównywane bez wielkości liter i nadmiarowych spacji, z zachowaniem innych różnic. Obok wyniku jest liczba pomiarów. Średnia i kolejność używają pełnej precyzji, a wyświetlanie dwóch miejsc po przecinku. Dokładne remisy współdzielą miejsce (1, 1, 3). Wersje, jednostki i testy nie są łączone. Brak modelu GPU nie blokuje zapisu raportu, ale jego pomiar nie tworzy anonimowego wpisu w rankingu GPU.
+
+Kliknij nazwę CPU lub GPU w rankingu albo archiwum, aby otworzyć historię tego modelu. Pokazuje ona **wszystkie zapisane raporty ze wszystkich edycji Cinebench**, podzielone na edycje, z pełnymi wersjami, pomiarami, systemem, datą, plikiem źródłowym i notatkami. Historia zawiera także częściowe raporty z nazwą tego modelu, w których nie wykonano odpowiedniego testu. Osobne podsumowania średnich zachowują rozdział wersji/testu/jednostki. Wyszukiwanie modelu jest dokładne po normalizacji nazwy — kliknięcie CPU A nie otwiera CPU A Plus. Filtry archiwum i aktualna wersja rankingu nie zawężają historii modelu.
+
+Historia jest lokalnym oknem dialogowym; zamknij przyciskiem Zamknij lub klawiszem Escape. Pusta baza pokazuje puste rankingi, które uzupełnią się po pierwszym imporcie. Nie ma dodatkowej migracji danych z v5.
+
+API: `GET /api/rankings?device=cpu&edition=R23&metric=cpu_multi&benchmark_version=23.200&unit=pts`, `GET /api/hardware?device=gpu&model=...`. Wyniki rankingów są widokami, bez osobnych kopii raportów w bazie.
 
 ## Sortowanie i średnie
 
@@ -87,4 +101,4 @@ Starsza baza nie zawiera wcześniej pominiętych pustych raportów — takie pli
 python -m unittest discover -s tests -v
 ```
 
-Testy korzystają z tymczasowych baz i lokalnego serwera. Sprawdzają dokładne wartości z 25 próbek, jeden plik/jeden rekord, komplet kolumn, sortowanie, średnie i ich liczebności, rozdzielanie wersji i jednostek, wartości brakujące, migrację z kopią bazy, zachowanie powtórnych importów, walidację i przepływ HTTP/CSV. Dodatkowe testy sprawdzają pierwszy start bez bazy i katalogu, pusty plik, ochronę uszkodzonej bazy, częściowo błędne partie oraz równoległe ponowienia bez dublowania rekordów. Dane użytkownika pozostają bez zmian.
+Testy korzystają z tymczasowych baz i lokalnego serwera. Sprawdzają dokładne wartości z 25 próbek, jeden plik/jeden rekord, komplet kolumn, sortowanie, średnie i ich liczebności, rozdzielanie wersji i jednostek, wartości brakujące, migrację z kopią bazy, zachowanie powtórnych importów, walidację i przepływ HTTP/CSV. Dodatkowe testy sprawdzają pierwszy start bez bazy i katalogu, pusty plik, ochronę uszkodzonej bazy, częściowo błędne partie oraz równoległe ponowienia bez dublowania rekordów. Testy rankingów sprawdzają średnie i remisy, rozdział wersji/testów/jednostek, brak nazwy GPU, historie dokładnie dopasowanych modeli oraz automatyczną aktualizację po imporcie i usunięciu. Dane użytkownika pozostają bez zmian.
